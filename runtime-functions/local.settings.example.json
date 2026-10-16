@@ -1,0 +1,24 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "java",
+    "GBC_PERSISTENCE_MODE": "memory",
+    "AUTH_MODE": "mock",
+    "GBC_KPI_VALIDATOR_ROLE": "KPI_OEE_VALIDATOR",
+    "GBC_KPI_VALIDATOR_ROLE_CODE": "KPI_OEE_VALIDATOR",
+    "GBC_KPI_VALIDATOR_CAPABILITY_CODE": "KPI_OEE_VALIDATION",
+    "DEV_TENANT_ID": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    "DEV_USER_OID": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    "DEV_USER_DISPLAY_NAME": "Local KPI Validator",
+    "DEV_USER_EMAIL": "local.kpi.validator@example.test",
+    "DEV_PLANT_ID": "1",
+    "DEV_LINE_ID": "1",
+    "DEV_PLANT_TIMEZONE": "America/Mexico_City",
+    "GBC_KPI_VALIDATOR_ASSIGNMENTS": "1=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    "GBC_STOP_PROGRAMMING_TYPE_BY_CODE": "MECHANICAL=UNPROGRAMMED",
+    "GBC_MASS_PERFORMANCE_SOURCE_MODE": "AUTO",
+    "GBC_ELABORATED_MASS_METRIC_CODE": "ELABORATED_MASS",
+    "GBC_DELIVERED_MASS_METRIC_CODE": "DELIVERED_MASS"
+  }
+}

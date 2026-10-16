@@ -1,0 +1,15 @@
+package com.gbconnected.kpivalidation.application;
+
+import java.util.List;
+
+public record JustificationPolicyView(
+        List<String> allowedReasonTypes,
+        List<String> operativeRequiredFields,
+        List<String> systemRequiredFields,
+        String textNormalizationState,
+        String textLengthPolicyState,
+        String incidentFormatValidationState,
+        String gbSupportValidationState,
+        String sensitiveDataPolicyState,
+        String persistenceState) {
+}

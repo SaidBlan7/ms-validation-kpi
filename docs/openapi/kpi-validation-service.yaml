@@ -1,0 +1,210 @@
+openapi: 3.0.3
+info:
+  title: GBC 2.0 KPI Validation Service
+  version: 0.9.0
+  description: Specs 01-07 service. Specs 01-05 are aligned with the physical v1.2 baseline where applicable. Spec 01 reads original KPI values from kpi.kpi_result, Spec 02 resolves plant-specific validator role/capability assignments, Spec 03 enforces plant-local D-1, Spec 04 reconstructs stop-time totals from the canonical v1.2 stops model, and Spec 05 prefers exact line-level telemetry.derived_metric mass values with an explicitly provisional scheduling fallback. No KPI validation workflow or assignment administration writes are performed by this micro.
+paths:
+  /api/v1/oee-validation/capabilities:
+    get:
+      summary: Shows implemented and pending KPI Validation capabilities
+      responses:
+        '200': { description: OK }
+        '401': { description: Authentication required }
+  /api/v1/oee-validation/justification/policy:
+    get:
+      summary: Returns the current Spec 06 justification policy
+      description: Declares allowed reasons and required evidence. Incident format/GB Support validation, UX text lengths and sensitive-data policy remain pending definition.
+      responses:
+        '200': { description: Justification policy }
+        '401': { description: Authentication required }
+  /api/v1/oee-validation/audit/policy:
+    get:
+      summary: Returns the current Spec 07 validator/timestamp evidence policy
+      description: Uses Entra tid+oid as immutable actor identity, captures optional name/principal snapshots, and represents time as an absolute UTC instant. Presentation timezone, persistence, disabled-account snapshot retention and Approval/Reporting reconciliation remain pending.
+      responses:
+        '200': { description: Audit evidence policy }
+        '401': { description: Authentication required }
+  /api/v1/oee-validation/workflow/policy:
+    get:
+      summary: Returns the semantic Spec 01 validation workflow contract
+      description: Declares provisional internal states PENDING_APPROVAL, APPROVED and REJECTED, source identity KPI_RESULT_ID, and explicitly marks persistence/concurrency/approval application as pending external storage or module contracts.
+      responses:
+        '200': { description: Workflow contract policy }
+        '401': { description: Authentication required }
+  /api/v1/oee-validation/assignments/policy:
+    get:
+      summary: Returns the Spec 02 KPI OEE validator assignment policy
+      description: Declares semantic role/capability codes, plant-specific scope, max two effective validators, external approval/administration ownership, optional valid_to expiry, multi-plant support, revocation semantics and remaining concurrency/audit limitations. It does not create or revoke assignments.
+      responses:
+        '200': { description: Validator assignment policy }
+        '401': { description: Authentication required }
+  /api/v1/oee-validation/assignments/me:
+    get:
+      summary: Returns the effective KPI plant assignments for the authenticated validator
+      description: In PostgreSQL/Lakebase, resolves current plant-scoped user_role_assignment for the configured role/capability and only returns plants that also have current generic plant access. Each returned plant includes effectiveValidatorCount, remainingSlots and overLimit. The effective count requires both current KPI role/capability assignment and current user_plant_access. In memory mode, uses the explicit local fixture.
+      responses:
+        '200': { description: Effective KPI assignments }
+        '401': { description: Authentication required }
+        '403': { description: Actor does not have the dedicated KPI validator entitlement }
+  /api/v1/oee-validation/temporal-context:
+    get:
+      summary: Returns the server-authoritative temporal context for KPI OEE validation
+      description: Returns plant-local current date/time, the only editable business date (D-1), and the local window in which that D-1 remains current. eligibilityWindowEndsAtExclusive is the next plant-local midnight; revalidateOnSubmit is true and the server recalculates D-1 on every operation. Weekends/holidays are not skipped. Elapsed-24-hour/OEE-cutoff semantics and final timezone authority remain explicitly pending.
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: Temporal context }
+        '400': { description: Invalid plant/line request }
+        '401': { description: Authentication required }
+        '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/eligibility:
+    get:
+      summary: Checks whether actor/plant/line/date are eligible for OEE validation
+      description: Recalculates D-1 on every request using the plant timezone. A stale URL or screen cannot keep a date editable after the plant crosses midnight; invalid timezone configuration is returned as a controlled blocker.
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: businessDate, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Eligibility result }
+        '401': { description: Authentication required }
+        '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/oee/reference:
+    get:
+      summary: Returns the canonical previous-day line-level KPI result used as the original value
+      description: Resolves metricCode as kpi.kpi_definition.kpi_code and reads the latest kpi.kpi_result whose plant/line match, optional shift/product/execution dimensions are null, and period_start/period_end exactly match the provisional plant-local D-1 window. No OEE code or aggregation fallback is inferred.
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: businessDate, required: true, schema: { type: string, format: date } }
+        - { in: query, name: metricCode, required: true, schema: { type: string }, description: Must match canonical kpi.kpi_definition.kpi_code }
+      responses:
+        '200': { description: Canonical OEE/KPI original-value reference }
+        '401': { description: Authentication required }
+        '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/prevalidate:
+    post:
+      summary: Validates available OEE correction rules including Spec 06 justification and Spec 07 audit evidence without persisting a proposal
+      description: Revalidates D-1 and Spec 06 justification on every request, then resolves originalValue again from canonical kpi.kpi_result. The response includes sourceRecordKey (kpi_result identity), normalized justification, Spec 07 auditEvidence, and targetStatusIfPersisted=PENDING_APPROVAL. Submission remains disabled until KPI validation persistence/approval exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plantId, lineId, businessDate, metricCode, proposedValue, reasonType]
+              properties:
+                plantId: { type: integer, format: int64 }
+                lineId: { type: integer, format: int64 }
+                businessDate: { type: string, format: date }
+                metricCode: { type: string, description: Canonical kpi.kpi_definition.kpi_code; official OEE 1/OEE 2/full codes are not hardcoded }
+                proposedValue: { type: number }
+                reasonType: { type: string, enum: [OPERATIVE, SYSTEM], description: Only the two confirmed Spec 06 reasons are accepted }
+                incidentNumber: { type: string, description: Required only for SYSTEM; non-blank capture only because the official ticket pattern and GB Support validation are undefined }
+                operationalCause: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
+                actionPlan: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
+      responses:
+        '200': { description: Prevalidation result }
+        '400': { description: Invalid request }
+        '401': { description: Authentication required }
+        '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/stop-times/policy:
+    get:
+      summary: Returns the current Spec 04 stop-time validation policy
+      description: Declares the canonical source, aggregate identity, PROGRAMMED/UNPROGRAMMED configuration key, historical inactive-classification handling, server-side original reconciliation, and the rules still pending external definition/persistence.
+      responses:
+        '200': { description: Stop-time policy }
+        '401': { description: Authentication required }
+  /api/v1/oee-validation/stop-times/reference:
+    get:
+      summary: Returns D-1 stop-time totals grouped by canonical v1.2 stop classification
+      description: Read-only reconstruction from stops.stop_event + stops.stop_fragment clipped to the selected D-1 window. Each event is grouped by its latest stops.classification_history row. Observed classifications remain visible even if currently inactive. programmingType is supplied only through explicit GBC_STOP_PROGRAMMING_TYPE_BY_CODE mapping; no code/name heuristic is used.
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: businessDate, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Canonical v1.2 stop-time totals by observed classification }
+        '400': { description: Invalid date/scope request }
+        '401': { description: Authentication required }
+        '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/stop-times/prevalidate:
+    post:
+      summary: Prevalidates one Spec 04 stop-time correction plus Specs 06-07 evidence without persisting it
+      description: Revalidates D-1/security/classification scope, reloads the canonical line/date/classification aggregate, blocks stale or manipulated originalSeconds, validates non-negative seconds and justification, and returns classification/programming metadata, observedOriginalSeconds, sourceAggregateKey, auditEvidence and targetStatusIfPersisted=PENDING_APPROVAL. Total-time mathematics, multi-classification persisted grouping and Approval KPI remain pending external definition/storage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plantId, lineId, businessDate, stopClassificationId, originalSeconds, proposedSeconds, reasonType]
+              properties:
+                plantId: { type: integer, format: int64 }
+                lineId: { type: integer, format: int64 }
+                businessDate: { type: string, format: date }
+                stopClassificationId: { type: integer, format: int64 }
+                originalSeconds: { type: integer, format: int64, minimum: 0, description: Must match the server-observed D-1 aggregate returned by /stop-times/reference }
+                proposedSeconds: { type: integer, format: int64, minimum: 0 }
+                reasonType: { type: string, enum: [OPERATIVE, SYSTEM], description: Only the two confirmed Spec 06 reasons are accepted }
+                incidentNumber: { type: string, description: Required only for SYSTEM; non-blank capture only because the official ticket pattern and GB Support validation are undefined }
+                operationalCause: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
+                actionPlan: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
+      responses:
+        '200': { description: Stop-time correction prevalidation result }
+        '400': { description: Invalid request }
+        '401': { description: Authentication required }
+        '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/masses/policy:
+    get:
+      summary: Returns the current Spec 05 mass-performance validation policy
+      description: Declares source mode, configurable semantic derived-metric codes, line/date/variable/UOM aggregate identity, canonical MASS-UOM rule, server-side original reconciliation, scheduling fallback status, and the functional rules still pending definition/persistence.
+      responses:
+        '200': { description: Mass-performance policy }
+        '401': { description: Authentication required }
+  /api/v1/oee-validation/masses/reference:
+    get:
+      summary: Returns previous-day elaborated/delivered mass references by line variable and UOM
+      description: Read-only v1.2 reference. In AUTO mode each variable first looks for an exact line-level telemetry.derived_metric covering the plant-local D-1 window using configurable metric codes. If no derived metric exists, ELABORATED_MASS may fall back to MASS-UOM scheduling.batch_execution for dough manufacturing executions and DELIVERED_MASS may fall back to MASS-UOM scheduling.finished_product_output. Fallback entries are explicitly marked provisional and units are never mixed.
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: businessDate, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Canonical/provisional mass references for D-1 }
+        '400': { description: Invalid date/scope request }
+        '401': { description: Authentication required }
+        '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/masses/prevalidate:
+    post:
+      summary: Prevalidates one Spec 05 mass correction plus Specs 06-07 evidence without persisting it
+      description: Validates D-1/security scope, canonical MASS UOM, variable, decimal non-negative values and reason details. The backend reloads the current line/date/variable/UOM reference and blocks a stale or manipulated originalValue. A missing source row is not treated as zero because Spec 05 is a correction flow, not KPI Manual capture. Responses include sourceAggregateKey, sourceType, normalized justification, auditEvidence and targetStatusIfPersisted=PENDING_APPROVAL. Relation rules, final rounding, post-persistence late-data precedence, persistence and approval remain pending.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plantId, lineId, businessDate, uomId, variable, originalValue, proposedValue, reasonType]
+              properties:
+                plantId: { type: integer, format: int64 }
+                lineId: { type: integer, format: int64 }
+                businessDate: { type: string, format: date }
+                uomId: { type: integer, format: int64, description: Canonical core.unit_of_measure with dimension_code=MASS }
+                variable: { type: string, enum: [ELABORATED_MASS, DELIVERED_MASS] }
+                originalValue: { type: number, minimum: 0, description: Must match the server-observed D-1 reference returned by /masses/reference }
+                proposedValue: { type: number, minimum: 0 }
+                reasonType: { type: string, enum: [OPERATIVE, SYSTEM], description: Only the two confirmed Spec 06 reasons are accepted }
+                incidentNumber: { type: string, description: Required only for SYSTEM; non-blank capture only because the official ticket pattern and GB Support validation are undefined }
+                operationalCause: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
+                actionPlan: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
+      responses:
+        '200': { description: Mass correction prevalidation result }
+        '400': { description: Invalid request }
+        '401': { description: Authentication required }
+        '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/health:
+    get:
+      summary: DB connectivity health
+      responses: { '200': { description: UP }, '503': { description: DOWN } }

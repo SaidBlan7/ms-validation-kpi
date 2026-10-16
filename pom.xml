@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.gbconnected</groupId>
+  <artifactId>gbc2-kpi-validation-service</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>GB Connected 2.0 KPI Validation Service</name>
+  <modules>
+    <module>domain</module>
+    <module>application</module>
+    <module>adapter-memory</module>
+    <module>adapter-postgres</module>
+    <module>bootstrap</module>
+    <module>runtime-app-service</module>
+    <module>runtime-functions</module>
+  </modules>
+  <properties>
+    <java.version>21</java.version>
+    <maven.compiler.release>${java.version}</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <spring.boot.version>4.1.1</spring.boot.version>
+    <azure.functions.java.library.version>3.3.0</azure.functions.java.library.version>
+    <azure.functions.maven.plugin.version>1.42.0</azure.functions.maven.plugin.version>
+    <databricks.sdk.version>0.149.0</databricks.sdk.version>
+    <postgresql.version>42.7.13</postgresql.version>
+    <gson.version>2.13.2</gson.version>
+    <maven.compiler.plugin.version>3.14.0</maven.compiler.plugin.version>
+    <maven.surefire.plugin.version>3.5.2</maven.surefire.plugin.version>
+    <maven.enforcer.plugin.version>3.6.1</maven.enforcer.plugin.version>
+  </properties>
+  <dependencyManagement>
+    <dependencies>
+      <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-dependencies</artifactId><version>${spring.boot.version}</version><type>pom</type><scope>import</scope></dependency>
+      <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><version>${postgresql.version}</version></dependency>
+      <dependency><groupId>com.databricks</groupId><artifactId>databricks-sdk-java</artifactId><version>${databricks.sdk.version}</version></dependency>
+      <dependency><groupId>com.google.code.gson</groupId><artifactId>gson</artifactId><version>${gson.version}</version></dependency>
+      <dependency><groupId>com.microsoft.azure.functions</groupId><artifactId>azure-functions-java-library</artifactId><version>${azure.functions.java.library.version}</version></dependency>
+    </dependencies>
+  </dependencyManagement>
+  <build>
+    <pluginManagement><plugins>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>${maven.compiler.plugin.version}</version><configuration><release>${java.version}</release><parameters>true</parameters></configuration></plugin>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>${maven.surefire.plugin.version}</version><configuration><useModulePath>false</useModulePath></configuration></plugin>
+    </plugins></pluginManagement>
+    <plugins>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId></plugin>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId></plugin>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-enforcer-plugin</artifactId><version>${maven.enforcer.plugin.version}</version><executions><execution><id>enforce-java-maven</id><goals><goal>enforce</goal></goals><configuration><rules><requireJavaVersion><version>[21,22)</version></requireJavaVersion><requireMavenVersion><version>[3.9,)</version></requireMavenVersion></rules></configuration></execution></executions></plugin>
+    </plugins>
+  </build>
+</project>
