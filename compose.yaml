@@ -21,6 +21,11 @@ services:
       GBC_MASS_PERFORMANCE_SOURCE_MODE: AUTO
       GBC_ELABORATED_MASS_METRIC_CODE: ELABORATED_MASS
       GBC_DELIVERED_MASS_METRIC_CODE: DELIVERED_MASS
+      # Spec 06: 0 means UX/business maximum is still undefined.
+      GBC_INCIDENT_NUMBER_MAX_LENGTH: "0"
+      GBC_OPERATIONAL_CAUSE_MAX_LENGTH: "0"
+      GBC_ACTION_PLAN_MAX_LENGTH: "0"
+      GBC_INCIDENT_NUMBER_REGEX: ""
       GBC_KPI_VALIDATOR_ASSIGNMENTS: 1=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
     ports:
       - "8080:8080"

@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.9.0
-  description: Specs 01-07 service. Specs 01-05 are aligned with the physical v1.2 baseline where applicable. Spec 01 reads original KPI values from kpi.kpi_result, Spec 02 resolves plant-specific validator role/capability assignments, Spec 03 enforces plant-local D-1, Spec 04 reconstructs stop-time totals from the canonical v1.2 stops model, and Spec 05 prefers exact line-level telemetry.derived_metric mass values with an explicitly provisional scheduling fallback. No KPI validation workflow or assignment administration writes are performed by this micro.
+  version: 0.10.0
+  description: Specs 01-07 service aligned with the physical v1.2 baseline where applicable. Specs 06-07 now expose configurable justification limits/incident format and canonical app_security user identity snapshots in prevalidation evidence. No KPI validation workflow or assignment administration writes are performed by this micro.
 paths:
   /api/v1/oee-validation/capabilities:
     get:
@@ -13,14 +13,14 @@ paths:
   /api/v1/oee-validation/justification/policy:
     get:
       summary: Returns the current Spec 06 justification policy
-      description: Declares allowed reasons and required evidence. Incident format/GB Support validation, UX text lengths and sensitive-data policy remain pending definition.
+      description: Declares allowed reasons and required evidence. Optional per-field maximum lengths and an optional incident regex are enforced when configured; GB Support online validation and sensitive-data policy remain pending.
       responses:
         '200': { description: Justification policy }
         '401': { description: Authentication required }
   /api/v1/oee-validation/audit/policy:
     get:
       summary: Returns the current Spec 07 validator/timestamp evidence policy
-      description: Uses Entra tid+oid as immutable actor identity, captures optional name/principal snapshots, and represents time as an absolute UTC instant. Presentation timezone, persistence, disabled-account snapshot retention and Approval/Reporting reconciliation remain pending.
+      description: Uses Entra tid+oid as immutable actor identity and, in canonical DB modes, also resolves app_security.user_identity.user_id plus display_name/corporate_email/is_active snapshots. Time is an absolute UTC instant. Presentation timezone, persistence, retention and Approval/Reporting reconciliation remain pending.
       responses:
         '200': { description: Audit evidence policy }
         '401': { description: Authentication required }
@@ -101,9 +101,9 @@ paths:
                 metricCode: { type: string, description: Canonical kpi.kpi_definition.kpi_code; official OEE 1/OEE 2/full codes are not hardcoded }
                 proposedValue: { type: number }
                 reasonType: { type: string, enum: [OPERATIVE, SYSTEM], description: Only the two confirmed Spec 06 reasons are accepted }
-                incidentNumber: { type: string, description: Required only for SYSTEM; non-blank capture only because the official ticket pattern and GB Support validation are undefined }
-                operationalCause: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
-                actionPlan: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
+                incidentNumber: { type: string, description: Required only for SYSTEM; optional configured max length and regex are enforced server-side; online GB Support validation remains undefined }
+                operationalCause: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
+                actionPlan: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
       responses:
         '200': { description: Prevalidation result }
         '400': { description: Invalid request }
@@ -148,9 +148,9 @@ paths:
                 originalSeconds: { type: integer, format: int64, minimum: 0, description: Must match the server-observed D-1 aggregate returned by /stop-times/reference }
                 proposedSeconds: { type: integer, format: int64, minimum: 0 }
                 reasonType: { type: string, enum: [OPERATIVE, SYSTEM], description: Only the two confirmed Spec 06 reasons are accepted }
-                incidentNumber: { type: string, description: Required only for SYSTEM; non-blank capture only because the official ticket pattern and GB Support validation are undefined }
-                operationalCause: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
-                actionPlan: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
+                incidentNumber: { type: string, description: Required only for SYSTEM; optional configured max length and regex are enforced server-side; online GB Support validation remains undefined }
+                operationalCause: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
+                actionPlan: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
       responses:
         '200': { description: Stop-time correction prevalidation result }
         '400': { description: Invalid request }
@@ -196,9 +196,9 @@ paths:
                 originalValue: { type: number, minimum: 0, description: Must match the server-observed D-1 reference returned by /masses/reference }
                 proposedValue: { type: number, minimum: 0 }
                 reasonType: { type: string, enum: [OPERATIVE, SYSTEM], description: Only the two confirmed Spec 06 reasons are accepted }
-                incidentNumber: { type: string, description: Required only for SYSTEM; non-blank capture only because the official ticket pattern and GB Support validation are undefined }
-                operationalCause: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
-                actionPlan: { type: string, description: Required only for OPERATIVE; outer whitespace is trimmed }
+                incidentNumber: { type: string, description: Required only for SYSTEM; optional configured max length and regex are enforced server-side; online GB Support validation remains undefined }
+                operationalCause: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
+                actionPlan: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
       responses:
         '200': { description: Mass correction prevalidation result }
         '400': { description: Invalid request }

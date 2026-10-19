@@ -17,7 +17,12 @@ public record CorrectionReason(
      * previous reason type.
      */
     public CorrectionReason normalized() {
+        return normalized(CorrectionReasonPolicy.unbounded());
+    }
+
+    public CorrectionReason normalized(CorrectionReasonPolicy policy) {
         if (type == null) throw new DomainValidationException("reasonType is required");
+        if (policy == null) policy = CorrectionReasonPolicy.unbounded();
 
         String incident = normalizeSingleLine("incidentNumber", incidentNumber);
         String cause = normalizeFreeText("operationalCause", operationalCause);
@@ -27,6 +32,8 @@ public record CorrectionReason(
             if (blank(incident)) {
                 throw new DomainValidationException("incidentNumber is required for SYSTEM reason");
             }
+            CorrectionReasonPolicy.validateLength("incidentNumber", incident, policy.incidentNumberMaxLength());
+            policy.validateIncidentFormat(incident);
             return new CorrectionReason(type, incident, null, null);
         }
         if (blank(cause)) {
@@ -35,6 +42,8 @@ public record CorrectionReason(
         if (blank(plan)) {
             throw new DomainValidationException("actionPlan is required for OPERATIVE reason");
         }
+        CorrectionReasonPolicy.validateLength("operationalCause", cause, policy.operationalCauseMaxLength());
+        CorrectionReasonPolicy.validateLength("actionPlan", plan, policy.actionPlanMaxLength());
         return new CorrectionReason(type, null, cause, plan);
     }
 

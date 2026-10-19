@@ -50,3 +50,41 @@ Do not deploy pre-existing `target/` artifacts from a source handoff. Rebuild cl
 rm -rf target */target
 mvn clean verify
 ```
+
+# Specs 06-07 final implementation checkpoint
+
+## Corrections found
+
+- The integrated handoff was missing `application/.../GetMassPerformanceReferenceUseCase.java` even though `OeeValidationService` and runtime wiring referenced it. A clean Java 21 compilation therefore failed until the interface was restored. Existing `target/` outputs could hide this problem; they remain non-canonical build artifacts.
+
+## Spec 06
+
+Implemented without inventing functional values:
+
+- `OPERATIVE` requires cause + action plan; `SYSTEM` requires incident number.
+- Required text is normalized and incompatible fields are discarded when reason changes.
+- Optional maximum lengths are configurable and enforced in Unicode code points.
+- Optional incident regex is configurable and enforced locally.
+- Missing limits/regex remain visible as pending definitions instead of silently imposing arbitrary rules.
+- GB Support online validation, sensitive-data policy and durable atomic persistence remain external/open.
+
+## Spec 07
+
+Implemented/prepared as far as possible without validation persistence:
+
+- `tid + oid` remains the immutable external actor identity.
+- PostgreSQL/Lakebase resolves existing `app_security.user_identity.user_id` plus display/email/active snapshots read-only.
+- Evidence prefers canonical identity snapshots and falls back to authentication claims.
+- Absolute event time remains `Instant`/UTC.
+- Historical durability, retention and cross-module reconciliation require the future KPI validation persistence/workflow.
+
+## Validation performed
+
+- Core modules: clean direct Java 21 compile passed.
+- App Service: direct Java 21 compile passed against dependencies extracted from the existing Boot artifact.
+- Functions: source compile passed with temporary core-host API stubs plus the packaged annotation/dependency jars.
+- Domain/application test sources: compile passed using lightweight JUnit API stubs.
+- Spec 06 runtime smoke: configured max lengths + incident regex enforced; invalid incident blocked.
+- Spec 07 runtime smoke: canonical user id/name/email/active snapshot takes precedence over token snapshots and the event instant is preserved.
+- OpenAPI YAML parses as `0.10.0` with 17 paths.
+- No canonical database writes or DDL were added.

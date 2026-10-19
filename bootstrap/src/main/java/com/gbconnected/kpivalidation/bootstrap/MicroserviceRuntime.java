@@ -7,6 +7,7 @@ import com.gbconnected.kpivalidation.adapter.memory.InMemoryOeeMetricSourceAdapt
 import com.gbconnected.kpivalidation.adapter.postgres.*;
 import com.gbconnected.kpivalidation.application.*;
 import com.gbconnected.kpivalidation.application.port.out.*;
+import com.gbconnected.kpivalidation.domain.CorrectionReasonPolicy;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Clock;
 import java.util.*;
@@ -31,6 +32,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
         StopTimeReferencePort stopTimes;
         MassPerformanceReferencePort massPerformance;
         OeeMetricSourcePort oeeMetrics;
+        ActorIdentityPort actorIdentity;
         AutoCloseable close = () -> { };
         DataSource sqlDataSource = null;
         Map<String, String> stopProgrammingTypeByCode = parseStopProgrammingTypeMapping(
@@ -55,6 +57,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                         : new InMemoryStopTimeReferenceAdapter(stopProgrammingTypeByCode);
                 massPerformance = new InMemoryMassPerformanceReferenceAdapter();
                 oeeMetrics = new InMemoryOeeMetricSourceAdapter();
+                actorIdentity = ActorIdentityPort.unavailable();
             }
             case "postgres-password" -> {
                 HikariDataSource ds = PooledDataSourceFactory.createPasswordDataSource(settings);
@@ -65,6 +68,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 stopTimes = new JdbcStopTimeReferenceAdapter(ds, stopProgrammingTypeByCode);
                 massPerformance = new JdbcMassPerformanceReferenceAdapter(ds, massSourceMode, elaboratedMetricCode, deliveredMetricCode);
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
+                actorIdentity = new JdbcActorIdentityAdapter(ds);
                 close = ds;
                 sqlDataSource = ds;
             }
@@ -77,6 +81,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 stopTimes = new JdbcStopTimeReferenceAdapter(ds, stopProgrammingTypeByCode);
                 massPerformance = new JdbcMassPerformanceReferenceAdapter(ds, massSourceMode, elaboratedMetricCode, deliveredMetricCode);
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
+                actorIdentity = new JdbcActorIdentityAdapter(ds);
                 close = ds;
                 sqlDataSource = ds;
             }
@@ -104,6 +109,12 @@ public final class MicroserviceRuntime implements AutoCloseable {
             assignments = new JdbcValidatorAssignmentAdapter(Objects.requireNonNull(sqlDataSource), validatorRoleCode, validatorCapabilityCode);
         }
 
+        CorrectionReasonPolicy correctionReasonPolicy = new CorrectionReasonPolicy(
+                optionalNonNegativeInt(env, "GBC_INCIDENT_NUMBER_MAX_LENGTH"),
+                optionalNonNegativeInt(env, "GBC_OPERATIONAL_CAUSE_MAX_LENGTH"),
+                optionalNonNegativeInt(env, "GBC_ACTION_PLAN_MAX_LENGTH"),
+                env.get("GBC_INCIDENT_NUMBER_REGEX"));
+
         OeeValidationService service = new OeeValidationService(
                 access,
                 context,
@@ -111,6 +122,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 stopTimes,
                 massPerformance,
                 oeeMetrics,
+                actorIdentity,
+                correctionReasonPolicy,
                 new PreviousLocalCalendarDayPolicy(),
                 Clock.systemUTC(),
                 role);
@@ -134,6 +147,18 @@ public final class MicroserviceRuntime implements AutoCloseable {
     public GetAuditPolicyUseCase auditPolicy() { return validation; }
     public GetWorkflowPolicyUseCase workflowPolicy() { return validation; }
     public DatabaseHealthPort health() { return health; }
+
+    private static int optionalNonNegativeInt(Map<String, String> env, String key) {
+        String raw = env.get(key);
+        if (raw == null || raw.isBlank()) return 0;
+        try {
+            int value = Integer.parseInt(raw.trim());
+            if (value < 0) throw new IllegalArgumentException(key + " cannot be negative");
+            return value;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(key + " must be a non-negative integer", ex);
+        }
+    }
 
     private static Map<String, String> parseStopProgrammingTypeMapping(String raw) {
         if (raw == null || raw.isBlank()) return Map.of();

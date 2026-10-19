@@ -21,6 +21,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
     private final StopTimeReferencePort stopTimeReference;
     private final MassPerformanceReferencePort massPerformanceReference;
     private final OeeMetricSourcePort oeeMetricSource;
+    private final ActorIdentityPort actorIdentity;
+    private final CorrectionReasonPolicy correctionReasonPolicy;
     private final BusinessDatePolicy businessDatePolicy;
     private final Clock clock;
     private final String requiredValidatorRole;
@@ -34,12 +36,30 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
             BusinessDatePolicy businessDatePolicy,
             Clock clock,
             String requiredValidatorRole) {
+        this(accessScope, context, validatorAssignments, stopTimeReference, massPerformanceReference, oeeMetricSource,
+                ActorIdentityPort.unavailable(), CorrectionReasonPolicy.unbounded(), businessDatePolicy, clock,
+                requiredValidatorRole);
+    }
+
+    public OeeValidationService(AccessScopePort accessScope,
+            OperationalContextPort context,
+            ValidatorAssignmentPort validatorAssignments,
+            StopTimeReferencePort stopTimeReference,
+            MassPerformanceReferencePort massPerformanceReference,
+            OeeMetricSourcePort oeeMetricSource,
+            ActorIdentityPort actorIdentity,
+            CorrectionReasonPolicy correctionReasonPolicy,
+            BusinessDatePolicy businessDatePolicy,
+            Clock clock,
+            String requiredValidatorRole) {
         this.accessScope = Objects.requireNonNull(accessScope);
         this.context = Objects.requireNonNull(context);
         this.validatorAssignments = Objects.requireNonNull(validatorAssignments);
         this.stopTimeReference = Objects.requireNonNull(stopTimeReference);
         this.massPerformanceReference = Objects.requireNonNull(massPerformanceReference);
         this.oeeMetricSource = Objects.requireNonNull(oeeMetricSource);
+        this.actorIdentity = Objects.requireNonNull(actorIdentity);
+        this.correctionReasonPolicy = Objects.requireNonNull(correctionReasonPolicy);
         this.businessDatePolicy = Objects.requireNonNull(businessDatePolicy);
         this.clock = Objects.requireNonNull(clock);
         this.requiredValidatorRole = requiredValidatorRole == null ? "" : requiredValidatorRole.trim();
@@ -634,7 +654,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         boolean hadPlan = actionPlan != null && !actionPlan.isBlank();
         try {
             CorrectionReason normalized = new CorrectionReason(reasonType, incidentNumber, operationalCause, actionPlan)
-                    .normalized();
+                    .normalized(correctionReasonPolicy);
 
             if (reasonType == ValidationReasonType.SYSTEM && (hadCause || hadPlan)) {
                 issues.add(ValidationIssue.warning("IRRELEVANT_OPERATIVE_DETAILS_DISCARDED",
@@ -644,13 +664,21 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "incidentNumber was discarded because OPERATIVE uses operationalCause and actionPlan as its evidence"));
             }
 
-            issues.add(ValidationIssue.warning("JUSTIFICATION_TEXT_LENGTH_PENDING_DEFINITION",
-                    "Spec 06 requires UX length limits for free text, but the maximum lengths are still undefined; no arbitrary business limit is imposed"));
+            boolean relevantLengthUndefined = reasonType == ValidationReasonType.SYSTEM
+                    ? !correctionReasonPolicy.incidentLengthConfigured()
+                    : (!correctionReasonPolicy.operationalCauseLengthConfigured() || !correctionReasonPolicy.actionPlanLengthConfigured());
+            if (relevantLengthUndefined) {
+                issues.add(ValidationIssue.warning("JUSTIFICATION_TEXT_LENGTH_PENDING_DEFINITION",
+                        "At least one relevant Spec 06 UX maximum length is not configured; no arbitrary business maximum is imposed for that field"));
+            }
             issues.add(ValidationIssue.warning("SENSITIVE_DATA_POLICY_PENDING_DEFINITION",
                     "Spec 06 leaves the sensitive-data policy for free-text justification fields undefined; callers must avoid placing secrets or unnecessary personal data in these fields"));
-            if (reasonType == ValidationReasonType.SYSTEM) {
+            if (reasonType == ValidationReasonType.SYSTEM && !correctionReasonPolicy.incidentRegexConfigured()) {
                 issues.add(ValidationIssue.warning("INCIDENT_FORMAT_AND_GB_SUPPORT_VALIDATION_PENDING",
-                        "incidentNumber is captured as non-blank text only; its format and validation against GB Support are still undefined"));
+                        "incidentNumber is captured as non-blank text only because no incident regex/GB Support validation contract is configured"));
+            } else if (reasonType == ValidationReasonType.SYSTEM) {
+                issues.add(ValidationIssue.warning("GB_SUPPORT_VALIDATION_PENDING",
+                        "incidentNumber matches the configured local format, but online validation against GB Support remains unavailable"));
             }
 
             return new CorrectionJustificationView(normalized.type(), normalized.incidentNumber(),
@@ -663,12 +691,21 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
 
 
     private ValidationAuditEvidenceView auditEvidence(ActorContext actor) {
+        ActorIdentitySnapshot canonical = null;
+        if (actor != null && actor.tenantId() != null && actor.objectId() != null) {
+            canonical = actorIdentity.findByEntraIdentity(actor.tenantId(), actor.objectId()).orElse(null);
+        }
+        String displayName = firstNonBlank(canonical == null ? null : canonical.displayName(), actor == null ? null : actor.displayName());
+        String principalName = firstNonBlank(canonical == null ? null : canonical.principalName(), actor == null ? null : actor.principalName());
         return new ValidationAuditEvidenceView(
+                canonical == null ? null : canonical.canonicalUserId(),
                 actor == null ? null : actor.tenantId(),
                 actor == null ? null : actor.objectId(),
                 actor == null ? null : actor.immutableActorId(),
-                actor == null ? null : actor.displayName(),
-                actor == null ? null : actor.principalName(),
+                displayName,
+                principalName,
+                canonical == null ? null : canonical.active(),
+                canonical == null ? actorIdentity.source() : canonical.source(),
                 Instant.now(clock),
                 "ABSOLUTE_INSTANT_UTC",
                 "PREVALIDATION_EVIDENCE_ONLY_PENDING_PERSISTENCE");
@@ -678,12 +715,23 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
     public AuditPolicyView getAuditPolicy() {
         return new AuditPolicyView(
                 "ENTRA_TENANT_ID_PLUS_OBJECT_ID",
+                actorIdentity.canonicalUserIdAvailable() ? "IMPLEMENTED_APP_SECURITY_USER_ID" : "NOT_AVAILABLE_IN_CURRENT_ADAPTER",
+                actorIdentity.source(),
                 List.of("displayNameSnapshot", "principalNameSnapshot"),
+                "APP_SECURITY_SNAPSHOT_THEN_AUTHENTICATION_CLAIM_FALLBACK",
                 "ABSOLUTE_INSTANT_UTC",
                 "PENDING_PRESENTATION_TIMEZONE_DEFINITION",
                 "PENDING_KPI_VALIDATION_PERSISTENCE",
-                "PENDING_PERSISTED_SNAPSHOT",
+                "READY_WHEN_SNAPSHOT_IS_PERSISTED_WITH_VALIDATION",
+                "PENDING_DEFINITION",
                 "PENDING_APPROVAL_AND_REPORTING_INTEGRATION");
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value.trim();
+        }
+        return null;
     }
 
     @Override
@@ -700,13 +748,24 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
 
     @Override
     public JustificationPolicyView getJustificationPolicy() {
+        boolean anyLength = correctionReasonPolicy.incidentLengthConfigured()
+                || correctionReasonPolicy.operationalCauseLengthConfigured()
+                || correctionReasonPolicy.actionPlanLengthConfigured();
+        boolean allLengths = correctionReasonPolicy.incidentLengthConfigured()
+                && correctionReasonPolicy.operationalCauseLengthConfigured()
+                && correctionReasonPolicy.actionPlanLengthConfigured();
         return new JustificationPolicyView(
                 List.of("OPERATIVE", "SYSTEM"),
                 List.of("operationalCause", "actionPlan"),
                 List.of("incidentNumber"),
-                "IMPLEMENTED_BASIC_TRIM_AND_CONTROL_CHARACTER_VALIDATION",
-                "PENDING_UX_DEFINITION",
-                "CAPTURE_ONLY_PATTERN_NOT_DEFINED",
+                "IMPLEMENTED_TRIM_LINE_ENDING_AND_CONTROL_CHARACTER_VALIDATION",
+                allLengths ? "CONFIGURED_AND_ENFORCED" : (anyLength ? "PARTIALLY_CONFIGURED_AND_ENFORCED" : "PENDING_UX_DEFINITION"),
+                correctionReasonPolicy.incidentNumberMaxLengthOrNull(),
+                correctionReasonPolicy.operationalCauseMaxLengthOrNull(),
+                correctionReasonPolicy.actionPlanMaxLengthOrNull(),
+                "UNICODE_CODE_POINTS",
+                correctionReasonPolicy.incidentRegexConfigured() ? "CONFIGURED_REGEX_ENFORCED" : "CAPTURE_ONLY_PATTERN_NOT_DEFINED",
+                correctionReasonPolicy.incidentNumberRegex(),
                 "PENDING_EXTERNAL_INTEGRATION",
                 "PENDING_DEFINITION",
                 "PENDING_KPI_VALIDATION_PERSISTENCE");
@@ -763,10 +822,14 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Only SYSTEM/OPERATIVE are accepted; SYSTEM requires incidentNumber, OPERATIVE requires cause/action plan, text is normalized and stale fields from a changed reason are discarded"),
                 new CapabilityView("justificationPersistence", "PENDING_EXTERNAL_INTEGRATION",
                         "Spec 06 requires atomic persistence with the validation, but no KPI validation persistence contract/table is available"),
-                new CapabilityView("gbSupportIncidentValidation", "PENDING_DEFINITION",
-                        "Incident format and validation against GB Support remain undefined; the service currently captures any non-blank incidentNumber"),
-                new CapabilityView("justificationTextPolicy", "IMPLEMENTED_PARTIAL",
-                        "Outer whitespace/control characters are handled; UX maximum lengths and sensitive-data policy remain undefined"),
+                new CapabilityView("gbSupportIncidentValidation", correctionReasonPolicy.incidentRegexConfigured() ? "IMPLEMENTED_LOCAL_FORMAT_ONLY" : "PENDING_DEFINITION",
+                        correctionReasonPolicy.incidentRegexConfigured()
+                                ? "Configured incident regex is enforced locally; online validation against GB Support remains pending"
+                                : "Incident format and validation against GB Support remain undefined; the service captures any non-blank incidentNumber"),
+                new CapabilityView("justificationTextPolicy",
+                        (correctionReasonPolicy.incidentLengthConfigured() && correctionReasonPolicy.operationalCauseLengthConfigured() && correctionReasonPolicy.actionPlanLengthConfigured())
+                                ? "IMPLEMENTED_CONFIGURABLE_LENGTHS" : "IMPLEMENTED_PARTIAL",
+                        "Whitespace/line endings/control characters are normalized and optional per-field Unicode length limits are enforced when configured; sensitive-data policy remains undefined"),
                 new CapabilityView("operationalMonitoring", "IMPLEMENTED",
                         "HTTP runtimes log critical consultations/actions and rejected requests with correlation and actor/scope when available"),
                 new CapabilityView("stopTimeReferenceByClassification", "IMPLEMENTED_CANONICAL_V1_2",
@@ -802,7 +865,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 new CapabilityView("lateAutomaticMassDataPrecedence", "IMPLEMENTED_PARTIAL",
                         "Source is rechecked before submission; precedence for automatic changes after a proposal is durably persisted remains undefined"),
                 new CapabilityView("validationAuditEvidence", "IMPLEMENTED_PREVALIDATION_ONLY",
-                        "Spec 07 prevalidation responses include immutable Entra tid+oid, optional display snapshots and the event instant; persistence is still pending"),
+                        "Spec 07 prevalidation responses include immutable Entra tid+oid, canonical app_security.user_id when available, account/display/principal snapshots and the absolute event instant; persistence is still pending"),
                 new CapabilityView("auditTimestampSemantics", "IMPLEMENTED",
                         "Spec 07 represents the validation/prevalidation event time as an absolute UTC Instant so a later presentation timezone cannot change the recorded instant"),
                 new CapabilityView("persistedAuditReconciliation", "PENDING_EXTERNAL_INTEGRATION",

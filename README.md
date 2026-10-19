@@ -163,21 +163,21 @@ La regla de suma total, una eventual aplicabilidad distinta por línea, agrupaci
 ## Spec 06 - justificación de la corrección
 
 - Motivos permitidos: `OPERATIVE` y `SYSTEM`.
-- `OPERATIVE` exige `operationalCause` + `actionPlan`.
-- `SYSTEM` exige `incidentNumber`.
-- La prevalidación devuelve una `justification` normalizada; si el usuario cambió de motivo, los campos del motivo anterior se descartan para no arrastrar evidencia obsoleta.
-- `GET /api/v1/oee-validation/justification/policy` publica la matriz de campos obligatorios y los aspectos aún pendientes.
-- No se impone todavía longitud máxima ni patrón del incidente y no existe validación contra GB Support porque la Spec 06 los deja por definir.
-- La justificación todavía no se persiste ni puede viajar a Aprobación KPI hasta contar con el contrato de persistencia correspondiente.
-
+- `OPERATIVE` exige `operationalCause` + `actionPlan`; `SYSTEM` exige `incidentNumber`.
+- La prevalidación devuelve `justification` normalizada y descarta campos del motivo anterior.
+- `GET /api/v1/oee-validation/justification/policy` publica la matriz efectiva.
+- Longitudes opcionales: `GBC_INCIDENT_NUMBER_MAX_LENGTH`, `GBC_OPERATIONAL_CAUSE_MAX_LENGTH`, `GBC_ACTION_PLAN_MAX_LENGTH`; `0`/ausente significa pendiente de definición y no impone un máximo arbitrario.
+- `GBC_INCIDENT_NUMBER_REGEX` permite validar localmente un formato cuando exista; no sustituye una futura validación contra GB Support.
+- La política de datos sensibles y la persistencia atómica con la validación siguen pendientes.
 
 ## Spec 07 - fecha, hora y usuario de la validación
 
-- Las tres prevalidaciones devuelven `auditEvidence` con `actorTenantId`, `actorObjectId`, `immutableActorId`, snapshots opcionales de nombre/principal y `eventTimestamp`.
-- La identidad inmutable es `tid + oid`; nombre/correo son sólo snapshots de presentación y no participan en autorización.
-- `eventTimestamp` es un `Instant` absoluto serializado en ISO-8601/UTC. La zona/formato de presentación sigue pendiente de definición.
-- `GET /api/v1/oee-validation/audit/policy` publica las garantías actuales y los puntos pendientes.
-- La evidencia sigue marcada como `PREVALIDATION_EVIDENCE_ONLY_PENDING_PERSISTENCE`: no se presenta como auditoría histórica guardada hasta que exista el contrato de persistencia KPI.
+- Las tres prevalidaciones devuelven `auditEvidence` con `tid`, `oid`, identidad inmutable, snapshots de presentación y `eventTimestamp`.
+- En PostgreSQL/Lakebase se añade `canonicalUserId` resuelto desde `app_security.user_identity.user_id`, junto con snapshot de `display_name`, `corporate_email` e `is_active`.
+- La identidad inmutable externa sigue siendo `tid + oid`; `canonicalUserId` prepara el enlace al FK interno de una futura entidad `kpi_validation`.
+- `eventTimestamp` es un `Instant` absoluto ISO-8601/UTC; la zona/formato de presentación siguen pendientes.
+- `GET /api/v1/oee-validation/audit/policy` publica la fuente canónica/fallback y los puntos pendientes.
+- La evidencia sigue marcada `PREVALIDATION_EVIDENCE_ONLY_PENDING_PERSISTENCE`: no se representa como auditoría histórica hasta que exista almacenamiento del workflow.
 
 ## Artefactos de build
 

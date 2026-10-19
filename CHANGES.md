@@ -117,3 +117,15 @@ No se agregan tablas, columnas ni escrituras a la BD canónica.
 - la selección del resultado exige período exacto D-1 local y scope de línea sin shift/product/execution para no inventar agregaciones ni cutoff OEE.
 - persistencia, unicidad de validación y `PENDING_APPROVAL` siguen pendientes: v1.2 no incluye tabla/contrato de workflow de Validación KPI.
 - esta migración cubre Spec 01; adapters PostgreSQL de Specs 04-05 continúan pendientes de migración v1.2 en sus respectivas revisiones.
+
+# Specs 06-07 completion pass on v1.2
+
+- Spec 06 keeps the confirmed `OPERATIVE` / `SYSTEM` semantics and now supports optional configurable maximum lengths (`GBC_INCIDENT_NUMBER_MAX_LENGTH`, `GBC_OPERATIONAL_CAUSE_MAX_LENGTH`, `GBC_ACTION_PLAN_MAX_LENGTH`). Unset/`0` remains explicitly undefined rather than inventing a business limit.
+- Spec 06 supports optional `GBC_INCIDENT_NUMBER_REGEX`; when configured it is validated locally at runtime and exposed by `/justification/policy`. This is not represented as GB Support online validation.
+- Spec 07 adds a read-only `JdbcActorIdentityAdapter` over `app_security.user_identity`, exposing `canonicalUserId`, canonical display/email snapshots, account-active snapshot and identity source in `auditEvidence` while preserving `tid/oid` as the external immutable identity.
+- Spec 07 snapshot precedence is canonical `app_security` data first, authentication claims second; the absolute timestamp remains UTC `Instant`.
+- Added missing `GetMassPerformanceReferenceUseCase.java`, which was referenced by source but absent from the uploaded ZIP and caused a clean source compilation failure.
+- OpenAPI advanced to `0.10.0`; Spec 06/07 status docs, README, architecture and local config examples updated.
+- Direct Java 21 source compilation passed for domain/application/memory/PostgreSQL/bootstrap/App Service. Azure Functions source compiled using temporary host API stubs plus packaged dependencies because the received Functions library contains annotations but not the runtime core API classes.
+- Source test compilation passed with lightweight JUnit API stubs; Spec 06 configurable policy and Spec 07 canonical snapshot smoke tests passed.
+- No INSERT/UPDATE/DELETE/CREATE/ALTER/DROP was introduced.

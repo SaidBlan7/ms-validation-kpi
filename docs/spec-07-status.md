@@ -3,31 +3,31 @@
 ## Implementado
 
 - Las prevalidaciones OEE general, tiempos y masas devuelven `auditEvidence`.
-- Identificador inmutable del actor: combinación `Entra tenant id (tid) + object id (oid)`.
-- Se conservan por separado `actorTenantId` y `actorObjectId`.
-- Se capturan `displayNameSnapshot` y `principalNameSnapshot` cuando el proveedor de identidad los entrega; no son obligatorios ni se usan para autorización.
+- Identificador inmutable externo: combinación `Entra tenant id (tid) + object id (oid)`.
+- En PostgreSQL/Lakebase también se resuelve `app_security.user_identity.user_id` como `canonicalUserId`, dejando preparado el FK que una futura entidad de validación necesitaría.
+- El snapshot canónico consulta `display_name`, `corporate_email` e `is_active` desde `app_security.user_identity`; nombre/principal del token se usan como fallback si el catálogo no trae esos datos.
+- Se conservan `actorTenantId`, `actorObjectId`, `immutableActorId`, `canonicalUserId`, `displayNameSnapshot`, `principalNameSnapshot`, `accountActiveSnapshot` e `identitySource`.
 - `eventTimestamp` se genera con el `Clock` del servicio como `Instant` y se serializa ISO-8601/UTC, preservando el instante absoluto.
-- App Service obtiene snapshots opcionales desde claims `name`, `preferred_username`, `email` o `upn`.
-- Azure Functions obtiene los equivalentes desde `X-MS-CLIENT-PRINCIPAL`/`userDetails`.
-- Modo mock permite `DEV_USER_DISPLAY_NAME` y `DEV_USER_EMAIL`.
-- Nuevo endpoint `GET /api/v1/oee-validation/audit/policy` en App Service y Azure Functions.
-- Capabilities explicitan el estado parcial de Spec 07.
-- No se registran nombre/correo en los logs operativos añadidos; los logs siguen usando los identificadores técnicos del actor.
+- App Service obtiene claims opcionales `name`, `preferred_username`, `email` o `upn`.
+- Azure Functions obtiene equivalentes desde `X-MS-CLIENT-PRINCIPAL`/`userDetails`.
+- Modo mock conserva snapshots mediante `DEV_USER_DISPLAY_NAME` y `DEV_USER_EMAIL`; no existe `canonicalUserId` en el adapter local porque no hay `app_security` real.
+- `GET /api/v1/oee-validation/audit/policy` expone fuente de identidad, precedencia de snapshots, timestamp y puntos pendientes.
+- Los logs operativos no incluyen nombre/correo ni texto libre de justificación; siguen usando identificadores técnicos y correlation ID.
 
 ## Pendiente por dependencia/definición
 
-- Persistir atómicamente usuario/timestamp junto con la validación.
-- Garantizar evidencia histórica después de deshabilitar o modificar la cuenta: requiere guardar el snapshot en la entidad/evento de validación.
-- Consultar una validación guardada y mostrar exactamente el actor/timestamp originales.
+- Persistir atómicamente el snapshot de actor/timestamp junto con la validación.
+- Garantizar evidencia histórica después de deshabilitar o modificar la cuenta: el payload ya está preparado, pero debe guardarse en la entidad/evento de validación.
+- Consultar una validación guardada y mostrar exactamente actor/timestamp originales.
 - Reconciliar la misma evidencia entre Validación KPI, Aprobación KPI y reportes.
 - Política de retención de auditoría.
-- Zona horaria/formato regional de **presentación**. El backend conserva ya el instante absoluto UTC.
-- Definir oficialmente si UI muestra nombre, correo/principal, identificador interno o combinación.
+- Zona horaria/formato regional de presentación. El backend conserva el instante absoluto UTC.
+- Definir oficialmente si UI muestra nombre, correo/principal, identificador interno o una combinación.
 
 ## Decisión de implementación
 
-La Spec 07 habla de una validación ya registrada, pero el micro aún no dispone del contrato de persistencia KPI. Por ello el bloque `auditEvidence` se marca con `evidencePersistenceState=PREVALIDATION_EVIDENCE_ONLY_PENDING_PERSISTENCE`. No se presenta el timestamp de prevalidación como si fuera un evento guardado. Cuando exista persistencia, el mismo bloque puede almacenarse como snapshot inmutable y reutilizarse en Aprobación/Reportes.
+La Spec 07 habla de una validación registrada, pero el micro aún no dispone del contrato de persistencia KPI. Por ello `auditEvidence.evidencePersistenceState` sigue siendo `PREVALIDATION_EVIDENCE_ONLY_PENDING_PERSISTENCE`. No se presenta el timestamp de prevalidación como si fuera un registro histórico guardado. Cuando exista persistencia, el mismo snapshot puede almacenarse de forma inmutable y reutilizarse en Aprobación/Reportes.
 
 ## Base de datos
 
-No se crean tablas/columnas y no se realizan INSERT/UPDATE/DELETE.
+No se crean tablas/columnas y no se realizan INSERT/UPDATE/DELETE. La única ampliación es una lectura de `app_security.user_identity` para enlazar el actor de Entra con el `user_id` canónico existente.
