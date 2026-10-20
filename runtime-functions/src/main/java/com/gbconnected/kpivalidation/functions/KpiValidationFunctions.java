@@ -321,6 +321,76 @@ public class KpiValidationFunctions {
         }
     }
 
+    @FunctionName("kpi-validation-stop-time-submit")
+    public HttpResponseMessage stopTimeSubmit(
+            @HttpTrigger(name = "req", methods = {HttpMethod.POST}, route = "v1/oee-validation/stop-times/validations", authLevel = AuthorizationLevel.FUNCTION)
+            HttpRequestMessage<Optional<String>> req,
+            ExecutionContext ctx) {
+        String correlationId = correlation(req);
+        try {
+            JsonObject body = JsonParser.parseString(
+                    req.getBody().orElseThrow(() -> new IllegalArgumentException("JSON body is required")))
+                    .getAsJsonObject();
+            var command = new PrevalidateStopTimeCorrectionCommand(
+                    longVal(body, "plantId"),
+                    longVal(body, "lineId"),
+                    LocalDate.parse(str(body, "businessDate")),
+                    longVal(body, "stopClassificationId"),
+                    longVal(body, "originalSeconds"),
+                    longVal(body, "proposedSeconds"),
+                    ValidationReasonType.valueOf(str(body, "reasonType").toUpperCase(Locale.ROOT)),
+                    nullable(body, "incidentNumber"),
+                    nullable(body, "operationalCause"),
+                    nullable(body, "actionPlan"));
+            ActorContext actor = FunctionActorContextResolver.resolve(req);
+            StopTimeValidationResult result = FunctionRuntime.RUNTIME.stopTimeSubmission()
+                    .submitStopTime(actor, command, correlationId);
+            ctx.getLogger().info("event=kpi_stop_time_validation_created actorTenant=" + actor.tenantId()
+                    + " actorObject=" + actor.objectId() + " validationId=" + result.validationId()
+                    + " plantId=" + result.plantId() + " lineId=" + result.lineId()
+                    + " businessDate=" + result.businessDate()
+                    + " stopClassificationId=" + result.stopClassificationId()
+                    + " status=" + result.status() + " correlationId=" + correlationId + " result=OK");
+            return json(req, HttpStatus.CREATED, result, correlationId);
+        } catch (SecurityException ex) {
+            return reject(req, ctx, HttpStatus.UNAUTHORIZED, ex.getMessage(), correlationId);
+        } catch (AuthorizationException ex) {
+            return reject(req, ctx, HttpStatus.FORBIDDEN, ex.getMessage(), correlationId);
+        } catch (ValidationAlreadyExistsException ex) {
+            return reject(req, ctx, HttpStatus.CONFLICT, ex.getMessage(), correlationId);
+        } catch (Exception ex) {
+            return reject(req, ctx, HttpStatus.BAD_REQUEST, ex.getMessage(), correlationId);
+        }
+    }
+
+    @FunctionName("kpi-validation-stop-time-detail")
+    public HttpResponseMessage stopTimeValidationDetail(
+            @HttpTrigger(name = "req", methods = {HttpMethod.GET}, route = "v1/oee-validation/stop-times/validations/{validationId}", authLevel = AuthorizationLevel.FUNCTION)
+            HttpRequestMessage<Optional<String>> req,
+            @BindingName("validationId") String validationId,
+            ExecutionContext ctx) {
+        String correlationId = correlation(req);
+        try {
+            ActorContext actor = FunctionActorContextResolver.resolve(req);
+            StopTimeValidationResult result = FunctionRuntime.RUNTIME.stopTimeValidationDetail()
+                    .getStopTimeValidation(actor, requiredLong(validationId, "validationId"));
+            ctx.getLogger().info("event=kpi_stop_time_validation_detail actorTenant=" + actor.tenantId()
+                    + " actorObject=" + actor.objectId() + " validationId=" + result.validationId()
+                    + " plantId=" + result.plantId() + " lineId=" + result.lineId()
+                    + " stopClassificationId=" + result.stopClassificationId()
+                    + " status=" + result.status() + " correlationId=" + correlationId + " result=OK");
+            return json(req, HttpStatus.OK, result, correlationId);
+        } catch (SecurityException ex) {
+            return reject(req, ctx, HttpStatus.UNAUTHORIZED, ex.getMessage(), correlationId);
+        } catch (AuthorizationException ex) {
+            return reject(req, ctx, HttpStatus.FORBIDDEN, ex.getMessage(), correlationId);
+        } catch (ValidationNotFoundException ex) {
+            return reject(req, ctx, HttpStatus.NOT_FOUND, ex.getMessage(), correlationId);
+        } catch (Exception ex) {
+            return reject(req, ctx, HttpStatus.BAD_REQUEST, ex.getMessage(), correlationId);
+        }
+    }
+
     @FunctionName("kpi-validation-mass-policy")
     public HttpResponseMessage massPolicy(
             @HttpTrigger(name = "req", methods = {HttpMethod.GET}, route = "v1/oee-validation/masses/policy", authLevel = AuthorizationLevel.FUNCTION)

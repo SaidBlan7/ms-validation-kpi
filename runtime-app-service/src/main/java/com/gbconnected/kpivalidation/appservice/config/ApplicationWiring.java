@@ -23,6 +23,8 @@ public class ApplicationWiring {
     @Bean GetStopTimeReferenceUseCase stopTimeReference(MicroserviceRuntime runtime) { return runtime.stopTimeReference(); }
     @Bean GetStopTimePolicyUseCase stopTimePolicy(MicroserviceRuntime runtime) { return runtime.stopTimePolicy(); }
     @Bean PrevalidateStopTimeCorrectionUseCase stopTimePrevalidation(MicroserviceRuntime runtime) { return runtime.stopTimePrevalidation(); }
+    @Bean SubmitStopTimeValidationUseCase stopTimeSubmission(MicroserviceRuntime runtime) { return runtime.stopTimeSubmission(); }
+    @Bean GetStopTimeValidationUseCase stopTimeValidationDetail(MicroserviceRuntime runtime) { return runtime.stopTimeValidationDetail(); }
     @Bean GetMassPerformanceReferenceUseCase massPerformanceReference(MicroserviceRuntime runtime) { return runtime.massPerformanceReference(); }
     @Bean GetMassPerformancePolicyUseCase massPerformancePolicy(MicroserviceRuntime runtime) { return runtime.massPerformancePolicy(); }
     @Bean PrevalidateMassPerformanceCorrectionUseCase massPerformancePrevalidation(MicroserviceRuntime runtime) { return runtime.massPerformancePrevalidation(); }

@@ -122,7 +122,7 @@ paths:
   /api/v1/oee-validation/temporal-context:
     get:
       summary: Returns the server-authoritative temporal context for KPI OEE validation
-      description: Returns plant-local current date/time, the only editable business date (D-1), and the local window in which that D-1 remains current. eligibilityWindowEndsAtExclusive is the next plant-local midnight; revalidateOnSubmit is true and the server recalculates D-1 on every operation. Weekends/holidays are not skipped. Elapsed-24-hour/OEE-cutoff semantics and final timezone authority remain explicitly pending.
+      description: Returns plant-local current date/time, the only editable business date (calendar D-1), and the local window in which that D-1 remains current. Weekends and holidays are never skipped and no business-day calendar is consulted. eligibilityWindowEndsAtExclusive is the next plant-local midnight; the server recalculates D-1 on every protected read/prevalidation and again before persistence, so a screen or saved URL that crosses midnight becomes stale. Elapsed-24-hour/OEE-cutoff semantics and final timezone authority remain explicitly pending.
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
         - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
@@ -134,7 +134,7 @@ paths:
   /api/v1/oee-validation/eligibility:
     get:
       summary: Checks whether actor/plant/line/date are eligible for OEE validation
-      description: Recalculates D-1 on every request using the plant timezone. A stale URL or screen cannot keep a date editable after the plant crosses midnight; invalid timezone configuration is returned as a controlled blocker.
+      description: Recalculates calendar D-1 on every request using the configured plant timezone. Saturday, Sunday and holidays are treated exactly like any other calendar day. Any date other than D-1 is rejected, so a stale URL or screen cannot remain editable after plant-local midnight; invalid timezone configuration is returned as a controlled blocker.
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
         - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
@@ -223,14 +223,14 @@ paths:
   /api/v1/oee-validation/stop-times/policy:
     get:
       summary: Returns the current Spec 04 stop-time validation policy
-      description: Declares the canonical source, aggregate identity, PROGRAMMED/UNPROGRAMMED configuration key, historical inactive-classification handling, server-side original reconciliation, and the rules still pending external definition/persistence.
+      description: Declares the canonical source, aggregate identity, canonical oee_stop_type_code classification, historical inactive-classification handling, server-side original reconciliation, persistence state, and rules still pending functional definition.
       responses:
         '200': { description: Stop-time policy }
         '401': { description: Authentication required }
   /api/v1/oee-validation/stop-times/reference:
     get:
       summary: Returns D-1 stop-time totals grouped by canonical v1.2 stop classification
-      description: Read-only reconstruction from stops.stop_event + stops.stop_fragment clipped to the selected D-1 window. Each event is grouped by its latest stops.classification_history row. Observed classifications remain visible even if currently inactive. programmingType is supplied only through explicit GBC_STOP_PROGRAMMING_TYPE_BY_CODE mapping; no code/name heuristic is used.
+      description: Read-only reconstruction from stops.stop_event + stops.stop_fragment clipped to the selected D-1 window. Each event is grouped by its latest stops.classification_history row. Observed classifications remain visible even if currently inactive. programmingType comes from canonical stops.stop_classification.oee_stop_type_code.
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
         - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
@@ -242,8 +242,8 @@ paths:
         '403': { description: Actor is not authorized for the requested KPI plant scope }
   /api/v1/oee-validation/stop-times/prevalidate:
     post:
-      summary: Prevalidates one Spec 04 stop-time correction plus Specs 06-07 evidence without persisting it
-      description: Revalidates D-1/security/classification scope, reloads the canonical line/date/classification aggregate, blocks stale or manipulated originalSeconds, validates non-negative seconds and justification, and returns classification/programming metadata, observedOriginalSeconds, sourceAggregateKey, auditEvidence and targetStatusIfPersisted=PENDING. Total-time mathematics, multi-classification persisted grouping and Approval KPI remain pending external definition/storage.
+      summary: Prevalidates one Spec 04 stop-time correction
+      description: Revalidates D-1/security/classification scope, reloads the canonical line/date/classification aggregate, blocks stale/manipulated originalSeconds, rejects negative or unchanged values, validates justification, checks the one-opportunity rule, and returns readiness for durable PENDING submission.
       requestBody:
         required: true
         content:
@@ -267,6 +267,45 @@ paths:
         '400': { description: Invalid request }
         '401': { description: Authentication required }
         '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/stop-times/validations:
+    post:
+      summary: Creates one Spec 04 stop-time validation proposal
+      description: Revalidates the complete Spec 04 request server-side and atomically persists kpi.kpi_validation plus kpi.kpi_validation_detail with stop_classification_id as PENDING. Concurrent submissions for the same line/date/classification are serialized by PostgreSQL advisory lock.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plantId, lineId, businessDate, stopClassificationId, originalSeconds, proposedSeconds, reasonType]
+              properties:
+                plantId: { type: integer, format: int64 }
+                lineId: { type: integer, format: int64 }
+                businessDate: { type: string, format: date }
+                stopClassificationId: { type: integer, format: int64 }
+                originalSeconds: { type: integer, format: int64, minimum: 0 }
+                proposedSeconds: { type: integer, format: int64, minimum: 0 }
+                reasonType: { type: string, enum: [OPERATIVE, SYSTEM] }
+                incidentNumber: { type: string }
+                operationalCause: { type: string }
+                actionPlan: { type: string }
+      responses:
+        '201': { description: Stop-time validation persisted as PENDING }
+        '400': { description: Invalid request }
+        '401': { description: Authentication required }
+        '403': { description: Scope/entitlement denied }
+        '409': { description: This line/date/classification already has a validation proposal }
+        '422': { description: Spec 04 business rules are not satisfied }
+  /api/v1/oee-validation/stop-times/validations/{validationId}:
+    get:
+      summary: Returns Spec 04 stop-time validation traceability
+      parameters:
+        - { in: path, name: validationId, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: Stop-time validation detail including classification, original/proposed seconds, reason, actor and timestamps }
+        '401': { description: Authentication required }
+        '403': { description: Scope/entitlement denied }
+        '404': { description: Stop-time validation not found }
   /api/v1/oee-validation/masses/policy:
     get:
       summary: Returns the current Spec 05 mass-performance validation policy

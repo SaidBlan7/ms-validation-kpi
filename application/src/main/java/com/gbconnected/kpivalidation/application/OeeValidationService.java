@@ -12,9 +12,9 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         GetMassPerformanceReferenceUseCase, PrevalidateMassPerformanceCorrectionUseCase,
         GetJustificationPolicyUseCase, GetAuditPolicyUseCase, GetWorkflowPolicyUseCase, GetOeeMetricReferenceUseCase,
         GetValidatorAssignmentPolicyUseCase, GetStopTimePolicyUseCase, GetMassPerformancePolicyUseCase,
-        SubmitOeeValidationUseCase, GetOeeValidationUseCase, AdministerValidatorAssignmentsUseCase {
+        SubmitOeeValidationUseCase, GetOeeValidationUseCase, SubmitStopTimeValidationUseCase, GetStopTimeValidationUseCase, AdministerValidatorAssignmentsUseCase {
 
-    private static final String DATE_POLICY_WARNING_CODE = "OEE_BUSINESS_DAY_CUTOFF_PROVISIONAL";
+    private static final String DATE_POLICY_WARNING_CODE = "OEE_TEMPORAL_AUTHORITY_PROVISIONAL";
 
     private final AccessScopePort accessScope;
     private final OperationalContextPort context;
@@ -131,7 +131,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         LocalDate expected = plantZone == null ? null : businessDatePolicy.editableBusinessDate(plant.get(), clock);
         if (businessDate != null && expected != null && !businessDate.equals(expected)) {
             issues.add(ValidationIssue.blocker("ONLY_PREVIOUS_DAY_ALLOWED",
-                    "Only the immediately previous local calendar day is eligible for validation; refresh temporal-context when the plant crosses midnight"));
+                    "Only D-1 in the plant-local calendar is eligible. Weekends and holidays are not skipped; refresh temporal-context when the plant crosses midnight"));
         }
         addDatePolicyWarning(issues);
 
@@ -229,7 +229,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
 
     private void addDatePolicyWarning(List<ValidationIssue> issues) {
         issues.add(ValidationIssue.warning(DATE_POLICY_WARNING_CODE,
-                "Spec 03 confirms D-1 including weekends/holidays, but the official OEE cutoff, exact 24-hour interpretation and authoritative timezone remain pending; current policy uses core.plant.timezone_name and the previous local calendar date"));
+                "Spec 03 confirms calendar D-1 and explicitly includes weekends/holidays. The official OEE cutoff, elapsed-24-hour interpretation and final timezone authority remain open; until defined, the server uses core.plant.timezone_name and never consults a business-day/holiday calendar"));
     }
 
     private void validateModuleEntitlement(ActorContext actor, List<ValidationIssue> issues) {
@@ -575,15 +575,27 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         CorrectionJustificationView justification = validateAndNormalizeJustification(
                 command.reasonType(), command.incidentNumber(), command.operationalCause(), command.actionPlan(), issues);
 
+        if (observed != null && command.originalSeconds() != null && command.proposedSeconds() != null
+                && command.originalSeconds().longValue() == command.proposedSeconds().longValue()) {
+            issues.add(ValidationIssue.blocker("PROPOSED_STOP_TIME_MUST_DIFFER",
+                    "proposedSeconds must differ from originalSeconds"));
+        }
+        if (!validationPersistence.available()) {
+            issues.add(ValidationIssue.warning("VALIDATION_PERSISTENCE_UNAVAILABLE",
+                    "Prevalidation is available, but this runtime cannot persist kpi.kpi_validation proposals"));
+        } else if (command.stopClassificationId() > 0
+                && validationPersistence.existsForStopTime(command.lineId(), command.businessDate(), command.stopClassificationId())) {
+            issues.add(ValidationIssue.blocker("STOP_TIME_ALREADY_VALIDATED",
+                    "This line/date/classification already has a validation proposal and cannot be edited again"));
+        }
+
         issues.add(ValidationIssue.warning("TOTAL_TIME_RULE_PENDING_DEFINITION",
                 "No 24-hour or cross-classification sum rule is applied because Spec 04 explicitly leaves the exact mathematical consistency rule undefined"));
         issues.add(ValidationIssue.warning("MULTI_CLASSIFICATION_VALIDATION_PENDING_DEFINITION",
-                "One classification is prevalidated per request until the workflow owner defines whether multiple classification changes belong to one validation record"));
-        issues.add(ValidationIssue.warning("VALIDATION_PERSISTENCE_NOT_CONNECTED",
-                "The correction is not saved and cannot become durably PENDING until the KPI validation persistence contract is available"));
+                "One classification is persisted per validation until the workflow owner defines whether multiple classification changes belong to one validation header"));
 
         boolean valid = issues.stream().noneMatch(i -> i.severity() == Severity.BLOCKER);
-        return new StopTimeCorrectionPrevalidationResult(valid, false, command.plantId(), command.lineId(),
+        return new StopTimeCorrectionPrevalidationResult(valid, valid && validationPersistence.available(), command.plantId(), command.lineId(),
                 command.businessDate(), command.stopClassificationId(),
                 observed == null ? null : observed.classificationCode(),
                 observed == null ? null : observed.classificationActive(),
@@ -596,7 +608,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         ? stopTimeReference.programmingTypeState()
                         : "MAPPING_INCOMPLETE",
                 ValidationWorkflowStatus.PENDING.name(),
-                "PENDING_EXTERNAL_INTEGRATION", List.copyOf(issues));
+                validationPersistence.available() ? "CANONICAL_KPI_VALIDATION_READY" : "UNAVAILABLE", List.copyOf(issues));
     }
 
     @Override
@@ -612,7 +624,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "PENDING_FUNCTIONAL_DEFINITION",
                 "ONE_CLASSIFICATION_PER_PREVALIDATION_PENDING_WORKFLOW_GROUPING_DEFINITION",
                 ValidationWorkflowStatus.PENDING.name(),
-                "PENDING_KPI_VALIDATION_PERSISTENCE");
+                validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION_DETAIL_STOP_CLASSIFICATION" : "UNAVAILABLE");
     }
 
     @Override
@@ -666,7 +678,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "PENDING_FUNCTIONAL_DEFINITION",
                 "RECHECK_BEFORE_SUBMISSION; POST_PERSISTENCE_PRECEDENCE_PENDING_DEFINITION",
                 ValidationWorkflowStatus.PENDING.name(),
-                "PENDING_KPI_VALIDATION_PERSISTENCE");
+                validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION_DETAIL_STOP_CLASSIFICATION" : "UNAVAILABLE");
     }
 
     @Override
@@ -750,7 +762,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 command.originalValue(), command.proposedValue(), observedReferenceValue,
                 originalMatchesOperationalReference, sourceAggregateKey, sourceType, justification,
                 auditEvidence(actor), massPerformanceReference.source(), ValidationWorkflowStatus.PENDING.name(),
-                "PENDING_EXTERNAL_INTEGRATION", List.copyOf(issues));
+                validationPersistence.available() ? "CANONICAL_KPI_VALIDATION_READY" : "UNAVAILABLE", List.copyOf(issues));
     }
 
 
@@ -816,6 +828,54 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 Instant.now(clock),
                 "ABSOLUTE_INSTANT_UTC",
                 validationPersistence.available() ? "CANONICAL_VALIDATION_PERSISTENCE_AVAILABLE" : "PREVALIDATION_ONLY");
+    }
+
+    @Override
+    public StopTimeValidationResult submitStopTime(ActorContext actor, PrevalidateStopTimeCorrectionCommand command,
+            String correlationId) {
+        StopTimeCorrectionPrevalidationResult pre = prevalidate(actor, command);
+        if (!pre.businessRulesValid() || !pre.readyForSubmission()) {
+            throw new DomainValidationException("Stop-time validation proposal does not satisfy Spec 04 business rules");
+        }
+        ValidationAuditEvidenceView evidence = auditEvidence(actor);
+        if (evidence.canonicalUserId() == null || !Boolean.TRUE.equals(evidence.accountActiveSnapshot())) {
+            throw new AuthorizationException("Canonical active app_security.user_identity is required to persist a validation");
+        }
+        PlantContext plant = context.findPlant(command.plantId())
+                .orElseThrow(() -> new IllegalStateException("Plant not found"));
+        ZoneId zone = ZoneId.of(plant.timezoneName());
+        Instant now = clock.instant();
+        Instant expiresAt = ZonedDateTime.now(clock.withZone(zone)).toLocalDate().plusDays(1)
+                .atStartOfDay(zone).minusSeconds(1).toInstant();
+        if (expiresAt.isBefore(now)) expiresAt = now;
+        CorrectionJustificationView j = pre.justification();
+        StopTimeValidationPersistenceRequest request = new StopTimeValidationPersistenceRequest(
+                command.plantId(), command.lineId(), command.businessDate(), command.stopClassificationId(),
+                command.originalSeconds(), command.proposedSeconds(), command.reasonType(), null,
+                j == null ? null : j.operationalCause(), j == null ? null : j.actionPlan(),
+                j == null ? null : j.incidentNumber(), evidence.canonicalUserId(), now, expiresAt, correlationId);
+        return validationPersistence.createStopTime(request);
+    }
+
+    @Override
+    public StopTimeValidationResult getStopTimeValidation(ActorContext actor, long validationId) {
+        if (validationId <= 0) throw new IllegalArgumentException("validationId must be positive");
+        StopTimeValidationResult result = validationPersistence.findStopTimeById(validationId)
+                .orElseThrow(() -> new ValidationNotFoundException("Stop-time validation not found"));
+        List<ValidationIssue> issues = new ArrayList<>();
+        validateModuleEntitlement(actor, issues);
+        validateSpecificKpiAssignment(actor, result.plantId(), issues);
+        validateFeatureActivation(result.plantId(), issues);
+        if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
+            throw new AuthorizationException("Actor is not authorized for KPI OEE validation");
+        }
+        if (!accessScope.hasPlantAccess(actor.tenantId(), actor.objectId(), result.plantId())) {
+            throw new AuthorizationException("Actor is not authorized for the validation plant scope");
+        }
+        if (result.lineId() != null && !context.lineBelongsToPlant(result.lineId(), result.plantId())) {
+            throw new AuthorizationException("Validation line is outside the authorized plant");
+        }
+        return result;
     }
 
     @Override
@@ -996,22 +1056,24 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Whitespace/line endings/control characters are normalized and optional per-field Unicode length limits are enforced when configured; sensitive-data policy remains undefined"),
                 new CapabilityView("operationalMonitoring", "IMPLEMENTED",
                         "HTTP runtimes log critical consultations/actions and rejected requests with correlation and actor/scope when available"),
-                new CapabilityView("stopTimeReferenceByClassification", "IMPLEMENTED_CANONICAL_V1_2",
+                new CapabilityView("stopTimeReferenceByClassification", "IMPLEMENTED_CANONICAL",
                         "Read-only reference clips stops.stop_fragment to the D-1 window and groups by the latest stops.classification_history classification for each event"),
                 new CapabilityView("stopTimeOriginalReconciliation", "IMPLEMENTED",
                         "Spec 04 prevalidation re-reads the canonical D-1 aggregate and blocks stale/manipulated originalSeconds"),
                 new CapabilityView("stopTimeSignAndFormatValidation", "IMPLEMENTED",
                         "Spec 04 prevalidation rejects missing or negative original/proposed stop-time seconds; zero is valid when observed"),
-                new CapabilityView("stopClassificationCatalogValidation", "IMPLEMENTED_PARTIAL",
+                new CapabilityView("stopClassificationCatalogValidation", "IMPLEMENTED_CANONICAL_SCOPE_FALLBACK",
                         "stopClassificationId is validated against stops.stop_classification and plant organization/global scope; active scoped classifications are exposed with zero when not observed because v1.2 has no line-specific relation"),
-                new CapabilityView("programmedUnprogrammedClassification", "IMPLEMENTED_CONFIGURABLE",
-                        "PROGRAMMED/UNPROGRAMMED is mapped explicitly by classification_code through GBC_STOP_PROGRAMMING_TYPE_BY_CODE; no code/name inference is performed"),
+                new CapabilityView("programmedUnprogrammedClassification", "IMPLEMENTED_CANONICAL",
+                        "PROGRAMMED/UNPROGRAMMED is read from stops.stop_classification.oee_stop_type_code; no external code/name mapping is required"),
                 new CapabilityView("inactiveStopClassificationHistory", "IMPLEMENTED_PROVISIONAL",
                         "A classification observed in D-1 remains visible/prevalidatable even when currently inactive so historical reconciliation does not disappear"),
-                new CapabilityView("stopTimeTotalConsistency", "PENDING_DEFINITION",
+                new CapabilityView("stopTimeTotalConsistency", "PENDING_FUNCTIONAL_DEFINITION",
                         "Spec 04 explicitly leaves the mathematical maximum/sum rule undefined; no 24-hour rule is inherited"),
-                new CapabilityView("multiClassificationValidation", "PENDING_DEFINITION",
-                        "Spec 04 leaves open whether several classification corrections belong to one persisted validation; prevalidation remains one classification per request"),
+                new CapabilityView("stopTimeValidationPersistence", validationPersistence.available() ? "IMPLEMENTED_CANONICAL" : "UNAVAILABLE",
+                        "Spec 04 proposals persist as PENDING using kpi.kpi_validation_detail.stop_classification_id with original/proposed values and transactional one-opportunity protection"),
+                new CapabilityView("multiClassificationValidation", "IMPLEMENTED_CONSERVATIVE_PENDING_GROUPING_DEFINITION",
+                        "Spec 04 leaves grouping open; the service persists one classification per validation header until business defines multi-detail grouping"),
                 new CapabilityView("massPerformanceReference", "IMPLEMENTED_CANONICAL_V1_2",
                         "Spec 05 prefers exact line-level telemetry.derived_metric values by semantic metric code and falls back per variable to canonical scheduling data when configured AUTO and no derived metric exists"),
                 new CapabilityView("massPerformanceOriginalReconciliation", "IMPLEMENTED",
@@ -1047,5 +1109,4 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         );
     }
 }
-
 

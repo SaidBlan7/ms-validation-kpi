@@ -6,7 +6,7 @@
 - Spec 01: identidad/scope canónico, activación por planta, OEE original desde `kpi.kpi_result`, original/propuesto, justificación/evidencia y persistencia real en `kpi.kpi_validation` + detalle con estado `PENDING`.
 - Spec 02: entitlement KPI específico por planta con role/capability v1.2, acceso genérico independiente y bloqueo operativo si la planta excede dos validadores efectivos.
 - Spec 03: D-1 calendario local, fines de semana/festivos incluidos, revalidación server-side y expiración de contexto al siguiente midnight local.
-- Spec 04: `stops` v1.2, agregado por clasificación, original server-side, mapping PROGRAMMED/UNPROGRAMMED configurable y conservación histórica provisional.
+- Spec 04: agregado canónico por clasificación, original server-side, `oee_stop_type_code` canónico y persistencia PENDING por `stop_classification_id`.
 - Spec 05: eliminado el modelo legacy `intermediate_material_movement/core.item`; referencia por línea + variable + UOM sobre fuentes físicas v1.2.
 
 ## Spec 05 source policy
@@ -30,7 +30,7 @@ Spec 05 prevalidation re-reads the canonical/provisional source. A stale/manipul
 - Validation KPI proposal persistence / status history (Specs 01, 04, 05).
 - Approval KPI and final application semantics.
 - Spec 03 final elapsed-24-hour/OEE-cutoff and authoritative timezone rule.
-- Spec 04 total-time mathematics, multi-classification grouping and official PROGRAMMED/UNPROGRAMMED source if configuration is not accepted.
+- Spec 04 total-time mathematics, multi-classification grouping and optional line-to-classification applicability if negocio requires it.
 - Spec 05 official mass metric codes or confirmation of the scheduling fallback semantics, special performance rules, relationship between elaborated/delivered values, final precision/rounding and precedence for automatic data arriving after durable proposal creation.
 
 ## Validation performed in this review

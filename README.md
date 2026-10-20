@@ -2,7 +2,7 @@
 
 Microservicio incremental para **Validación KPI: OEE**, con Specs 01 a 07 integradas. La migración a la baseline física v1.2 se está realizando por especificación; **Specs 01, 02 y 03 ya están alineadas/revisadas contra v1.2 en su alcance actual**.
 
-No crea tablas ni columnas de workflow KPI y no ejecuta escrituras sobre PostgreSQL. Para **Spec 01 sobre v1.2** lee:
+No crea tablas ni columnas nuevas de workflow KPI. Sobre la base canónica actual **lee y escribe** únicamente las estructuras ya existentes que corresponden a Specs 01–03. Para Spec 01/02 utiliza:
 
 - `app_security.user_identity`
 - `app_security.user_plant_access`
@@ -29,6 +29,8 @@ Los adapters de Specs 04-05 todavía reflejan la baseline anterior y se migrará
 - `GET /api/v1/oee-validation/stop-times/policy`
 - `GET /api/v1/oee-validation/stop-times/reference?plantId=&lineId=&businessDate=`
 - `POST /api/v1/oee-validation/stop-times/prevalidate`
+- `POST /api/v1/oee-validation/stop-times/validations`
+- `GET /api/v1/oee-validation/stop-times/validations/{validationId}`
 - `GET /api/v1/oee-validation/masses/policy`
 - `GET /api/v1/oee-validation/masses/reference?plantId=&lineId=&businessDate=`
 - `POST /api/v1/oee-validation/masses/prevalidate`
@@ -66,7 +68,7 @@ El acceso funcional requiere simultáneamente:
 4. Acceso genérico vigente en `app_security.user_plant_access`.
 5. Asignación vigente `core.line_plant_assignment` entre la línea y la planta.
 
-Cada operación valida además que la planta no tenga más de dos **validadores OEE efectivos**. El conteo exige asignación KPI/capability vigente **y** `user_plant_access` vigente, para que un rol residual sin acceso general no consuma uno de los dos lugares. Como el DDL v1.2 no incluye un constraint que impida crear una tercera asignación, este micro detecta la configuración inválida y bloquea el uso de la planta; la prevención transaccional en el write path administrativo queda fuera de su ownership.
+Cada operación valida además que la planta no tenga más de dos **validadores OEE efectivos**. El conteo exige asignación KPI/capability vigente **y** `user_plant_access` vigente, para que un rol residual sin acceso general no consuma uno de los dos lugares. Como el DDL v1.2 no incluye un constraint que impida crear una tercera asignación, este micro protege su propio write path administrativo con serialización transaccional por planta y vuelve a validar el máximo al usar el módulo. Un escritor externo directo a BD todavía podría romper esa cardinalidad.
 
 `GET /api/v1/oee-validation/assignments/policy` documenta la política Spec 02. La aprobación de Dirección Global sigue siendo externa, pero la administración técnica ya está implementada en este micro: alta, modificación, revocación, máximo de dos con serialización transaccional por planta y auditoría canónica. `GET /assignments/me` mantiene la visibilidad del validador y `GET /assignments?plantId=...` expone la vista administrativa.
 
@@ -98,7 +100,6 @@ La interpretación exacta de “máximo 24 hrs”, el corte oficial del día OEE
 | `GBC_KPI_VALIDATOR_ADMIN_CAPABILITY_CODE` | capability_code para administrar asignaciones Spec 02; default semántico `KPI_OEE_VALIDATOR_ASSIGNMENT_ADMIN` |
 | `GBC_KPI_VALIDATOR_ROLE` | role claim usado sólo en modo local/external-config |
 | `GBC_KPI_VALIDATOR_ASSIGNMENTS` | fixture de asignaciones usado sólo en `memory` |
-| `GBC_STOP_PROGRAMMING_TYPE_BY_CODE` | mapping explícito `classificationCode=PROGRAMMED|UNPROGRAMMED`; acepta múltiples entradas separadas por coma o punto y coma |
 | `GBC_MASS_PERFORMANCE_SOURCE_MODE` | `AUTO` (default), `DERIVED_METRIC_ONLY` o `SCHEDULING_FALLBACK_ONLY` |
 | `GBC_ELABORATED_MASS_METRIC_CODE` | código semántico de `telemetry.derived_metric`; default `ELABORATED_MASS` |
 | `GBC_DELIVERED_MASS_METRIC_CODE` | código semántico de `telemetry.derived_metric`; default `DELIVERED_MASS` |
@@ -115,10 +116,9 @@ GBC_KPI_VALIDATOR_ASSIGNMENTS=1=<tenant>/<oid1>,<tenant>/<oid2>;2=<tenant>/<oid1
 
 ## Importante
 
-- Todavía no existe `POST /validations`: no hay persistencia KPI disponible y el servicio no simula guardar propuestas.
 - `prevalidate` resuelve el valor OEE/KPI original desde `kpi.kpi_result`, devuelve `sourceRecordKey`, valida una sola oportunidad y declara estado objetivo `PENDING`. `POST /api/v1/oee-validation/validations` persiste la propuesta en `kpi.kpi_validation` + `kpi.kpi_validation_detail`.
 - `GET /api/v1/oee-validation/workflow/policy` publica los estados canónicos `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`; Aprobación KPI conserva la segunda etapa.
-- Ver `docs/spec-01-status.md` a `docs/spec-07-status.md` para el estado de cada especificación.
+- Ver `docs/spec-01-status.md`, `docs/spec-02-status.md` y `docs/spec-03-status.md` para el alcance ya revisado en esta iteración; Specs posteriores conservan sus documentos incrementales hasta que se revisen.
 
 ## Build
 
@@ -142,10 +142,12 @@ mvn -pl runtime-functions -am azure-functions:run
 
 ## Spec 04 - tiempos por clasificación de paro
 
-- `GET /api/v1/oee-validation/stop-times/policy`: contrato actual de fuente, mapping PROGRAMMED/UNPROGRAMMED, clasificación inactiva, reconciliación y pendientes.
+- `GET /api/v1/oee-validation/stop-times/policy`: contrato actual de fuente, `oee_stop_type_code`, clasificación inactiva, reconciliación, persistencia y pendientes.
 - `GET /api/v1/oee-validation/stop-times/reference?plantId=&lineId=&businessDate=`: reconstrucción read-only sobre el DDL v1.2 (`stop_event` + `stop_fragment` + última `classification_history`). Expone el catálogo activo global/organización de la planta incluso con `0` segundos y retiene clasificaciones inactivas cuando sí fueron observadas en D-1.
 - `POST /api/v1/oee-validation/stop-times/prevalidate`: valida una corrección y vuelve a resolver en servidor el valor original; un original stale/manipulado se bloquea.
-- `GBC_STOP_PROGRAMMING_TYPE_BY_CODE` permite mapear explícitamente `classification_code=PROGRAMMED|UNPROGRAMMED` sin heurísticas. Ejemplo local: `MECHANICAL=UNPROGRAMMED`.
+- `POST /api/v1/oee-validation/stop-times/validations`: persiste la propuesta canónica `PENDING` con `stop_classification_id`, original y propuesto.
+- `GET /api/v1/oee-validation/stop-times/validations/{validationId}`: devuelve trazabilidad completa para reconciliación/aprobación.
+- PROGRAMMED/UNPROGRAMMED proviene directamente de `stops.stop_classification.oee_stop_type_code`; no se requiere mapping externo.
 - Una clasificación observada en D-1 permanece reconciliable aunque actualmente esté inactiva.
 
 La regla de suma total, una eventual aplicabilidad distinta por línea, agrupación de múltiples correcciones y persistencia/aprobación siguen pendientes de definición o del contrato de Validación KPI. Ver `docs/spec-04-status.md`.
@@ -191,4 +193,3 @@ mvn clean verify
 ```
 
 Después, empaquetar el runtime requerido. Esto es especialmente importante cuando se integran patches incrementales: un `target/` anterior puede arrancar correctamente pero no contener los endpoints/clases más recientes.
-

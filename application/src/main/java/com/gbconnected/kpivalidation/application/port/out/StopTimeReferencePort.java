@@ -19,5 +19,5 @@ public interface StopTimeReferencePort {
 
     default String source() { return "CANONICAL_STOPS_V1_2"; }
     default String programmingTypeState() { return "CONFIGURATION_REQUIRED"; }
-    default String programmingTypeConfigurationKey() { return "GBC_STOP_PROGRAMMING_TYPE_BY_CODE"; }
+    default String programmingTypeConfigurationKey() { return "stops.stop_classification.oee_stop_type_code"; }
 }

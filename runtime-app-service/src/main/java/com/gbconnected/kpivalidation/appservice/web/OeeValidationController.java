@@ -29,6 +29,8 @@ public class OeeValidationController {
     private final GetStopTimeReferenceUseCase stopTimeReference;
     private final GetStopTimePolicyUseCase stopTimePolicy;
     private final PrevalidateStopTimeCorrectionUseCase stopTimePrevalidation;
+    private final SubmitStopTimeValidationUseCase stopTimeSubmission;
+    private final GetStopTimeValidationUseCase stopTimeValidationDetail;
     private final GetMassPerformanceReferenceUseCase massPerformanceReference;
     private final GetMassPerformancePolicyUseCase massPerformancePolicy;
     private final PrevalidateMassPerformanceCorrectionUseCase massPerformancePrevalidation;
@@ -49,6 +51,8 @@ public class OeeValidationController {
             GetStopTimeReferenceUseCase stopTimeReference,
             GetStopTimePolicyUseCase stopTimePolicy,
             PrevalidateStopTimeCorrectionUseCase stopTimePrevalidation,
+            SubmitStopTimeValidationUseCase stopTimeSubmission,
+            GetStopTimeValidationUseCase stopTimeValidationDetail,
             GetMassPerformanceReferenceUseCase massPerformanceReference,
             GetMassPerformancePolicyUseCase massPerformancePolicy,
             PrevalidateMassPerformanceCorrectionUseCase massPerformancePrevalidation,
@@ -68,6 +72,8 @@ public class OeeValidationController {
         this.stopTimeReference = stopTimeReference;
         this.stopTimePolicy = stopTimePolicy;
         this.stopTimePrevalidation = stopTimePrevalidation;
+        this.stopTimeSubmission = stopTimeSubmission;
+        this.stopTimeValidationDetail = stopTimeValidationDetail;
         this.massPerformanceReference = massPerformanceReference;
         this.massPerformancePolicy = massPerformancePolicy;
         this.massPerformancePrevalidation = massPerformancePrevalidation;
@@ -229,6 +235,34 @@ public class OeeValidationController {
         LOG.info("event=kpi_stop_time_prevalidate actorTenant={} actorObject={} plantId={} lineId={} businessDate={} stopClassificationId={} reasonType={} correlationId={} rulesValid={} readyForSubmission={}",
                 actor.tenantId(), actor.objectId(), request.plantId(), request.lineId(), request.businessDate(),
                 request.stopClassificationId(), request.reasonType(), correlationId(), result.businessRulesValid(), result.readyForSubmission());
+        return result;
+    }
+
+    @PostMapping("/stop-times/validations")
+    @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    public StopTimeValidationResult submitStopTime(@AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody StopTimePrevalidationHttpRequest request) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        StopTimeValidationResult result = stopTimeSubmission.submitStopTime(actor,
+                new PrevalidateStopTimeCorrectionCommand(
+                        request.plantId(), request.lineId(), request.businessDate(), request.stopClassificationId(),
+                        request.originalSeconds(), request.proposedSeconds(), request.reasonType(),
+                        request.incidentNumber(), request.operationalCause(), request.actionPlan()),
+                correlationId());
+        LOG.info("event=kpi_stop_time_validation_created actorTenant={} actorObject={} validationId={} plantId={} lineId={} businessDate={} stopClassificationId={} status={} correlationId={} result=OK",
+                actor.tenantId(), actor.objectId(), result.validationId(), result.plantId(), result.lineId(),
+                result.businessDate(), result.stopClassificationId(), result.status(), correlationId());
+        return result;
+    }
+
+    @GetMapping("/stop-times/validations/{validationId}")
+    public StopTimeValidationResult stopTimeValidationDetail(@AuthenticationPrincipal Jwt jwt,
+            @PathVariable long validationId) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        StopTimeValidationResult result = stopTimeValidationDetail.getStopTimeValidation(actor, validationId);
+        LOG.info("event=kpi_stop_time_validation_detail actorTenant={} actorObject={} validationId={} plantId={} lineId={} stopClassificationId={} status={} correlationId={} result=OK",
+                actor.tenantId(), actor.objectId(), validationId, result.plantId(), result.lineId(),
+                result.stopClassificationId(), result.status(), correlationId());
         return result;
     }
 

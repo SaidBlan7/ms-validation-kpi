@@ -40,8 +40,6 @@ public final class MicroserviceRuntime implements AutoCloseable {
         ValidatorAssignmentAdministrationPort assignmentAdministration = ValidatorAssignmentAdministrationPort.unavailable();
         AutoCloseable close = () -> { };
         DataSource sqlDataSource = null;
-        Map<String, String> stopProgrammingTypeByCode = parseStopProgrammingTypeMapping(
-                env.get("GBC_STOP_PROGRAMMING_TYPE_BY_CODE"));
         String massSourceMode = env.getOrDefault("GBC_MASS_PERFORMANCE_SOURCE_MODE", "AUTO");
         String elaboratedMetricCode = env.getOrDefault("GBC_ELABORATED_MASS_METRIC_CODE", "ELABORATED_MASS");
         String deliveredMetricCode = env.getOrDefault("GBC_DELIVERED_MASS_METRIC_CODE", "DELIVERED_MASS");
@@ -57,9 +55,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 access = memory;
                 context = memory;
                 health = memory;
-                stopTimes = stopProgrammingTypeByCode.isEmpty()
-                        ? new InMemoryStopTimeReferenceAdapter()
-                        : new InMemoryStopTimeReferenceAdapter(stopProgrammingTypeByCode);
+                stopTimes = new InMemoryStopTimeReferenceAdapter();
                 massPerformance = new InMemoryMassPerformanceReferenceAdapter();
                 oeeMetrics = new InMemoryOeeMetricSourceAdapter();
                 actorIdentity = new InMemoryActorIdentityAdapter(tenant, user, Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")));
@@ -72,7 +68,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 access = jdbc;
                 context = jdbc;
                 health = jdbc;
-                stopTimes = new JdbcStopTimeReferenceAdapter(ds, stopProgrammingTypeByCode);
+                stopTimes = new JdbcStopTimeReferenceAdapter(ds);
                 massPerformance = new JdbcMassPerformanceReferenceAdapter(ds, massSourceMode, elaboratedMetricCode, deliveredMetricCode);
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
@@ -87,7 +83,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 access = jdbc;
                 context = jdbc;
                 health = jdbc;
-                stopTimes = new JdbcStopTimeReferenceAdapter(ds, stopProgrammingTypeByCode);
+                stopTimes = new JdbcStopTimeReferenceAdapter(ds);
                 massPerformance = new JdbcMassPerformanceReferenceAdapter(ds, massSourceMode, elaboratedMetricCode, deliveredMetricCode);
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
@@ -160,6 +156,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
     public GetStopTimeReferenceUseCase stopTimeReference() { return validation; }
     public GetStopTimePolicyUseCase stopTimePolicy() { return validation; }
     public PrevalidateStopTimeCorrectionUseCase stopTimePrevalidation() { return validation; }
+    public SubmitStopTimeValidationUseCase stopTimeSubmission() { return validation; }
+    public GetStopTimeValidationUseCase stopTimeValidationDetail() { return validation; }
     public GetMassPerformanceReferenceUseCase massPerformanceReference() { return validation; }
     public GetMassPerformancePolicyUseCase massPerformancePolicy() { return validation; }
     public PrevalidateMassPerformanceCorrectionUseCase massPerformancePrevalidation() { return validation; }
@@ -178,27 +176,6 @@ public final class MicroserviceRuntime implements AutoCloseable {
         } catch (NumberFormatException ex) {
             throw new IllegalArgumentException(key + " must be a non-negative integer", ex);
         }
-    }
-
-    private static Map<String, String> parseStopProgrammingTypeMapping(String raw) {
-        if (raw == null || raw.isBlank()) return Map.of();
-        Map<String, String> out = new LinkedHashMap<>();
-        for (String token : raw.split("[,;]")) {
-            if (token == null || token.isBlank()) continue;
-            int separator = token.indexOf('=');
-            if (separator <= 0 || separator == token.length() - 1) {
-                throw new IllegalArgumentException(
-                        "GBC_STOP_PROGRAMMING_TYPE_BY_CODE entries must use classificationCode=PROGRAMMED|UNPROGRAMMED");
-            }
-            String code = token.substring(0, separator).trim();
-            String type = token.substring(separator + 1).trim().toUpperCase(Locale.ROOT);
-            if (!Set.of("PROGRAMMED", "UNPROGRAMMED").contains(type)) {
-                throw new IllegalArgumentException(
-                        "Unsupported programming type for stop classification " + code + ": " + type);
-            }
-            out.put(code, type);
-        }
-        return Map.copyOf(out);
     }
 
     @Override

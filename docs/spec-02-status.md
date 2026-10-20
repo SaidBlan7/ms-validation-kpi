@@ -16,7 +16,8 @@
 - Alta/modificación/revocación alimentan `audit.change_log` mediante el trigger canónico de `user_role_assignment`, fijando `app.user_id`, `app.source_system` y `app.correlation_id` en la transacción.
 - `valid_to = NULL` significa vigencia indefinida; una fecha informada debe ser futura.
 - Un superusuario puede estar asignado a múltiples plantas; no existe límite global en la Spec.
-- Revocar la asignación bloquea nuevas aperturas/consultas/modificaciones porque toda operación funcional revalida el entitlement en servidor.
+- Revocar la asignación bloquea nuevas aperturas/consultas/modificaciones porque toda operación funcional revalida el entitlement en servidor, incluyendo la creación y consulta de propuestas de tiempos de Spec 04.
+- Spec 03 reutiliza la misma autorización en `temporal-context` y `eligibility`; una URL o pantalla conservada no permite consultar ni validar una planta después de revocar la asignación.
 
 ## Dependencias / decisiones abiertas conservadas
 

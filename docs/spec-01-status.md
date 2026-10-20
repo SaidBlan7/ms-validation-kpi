@@ -9,7 +9,7 @@
 - Fuente original OEE desde `kpi.kpi_definition` + `kpi.kpi_result`, conservando `kpi_result_id` como identidad del dato.
 - Visualización/contrato de valor original y propuesto mediante reference/prevalidate/detail.
 - Motivo SYSTEM con incidente obligatorio y OPERATIVE con causa + plan de acción obligatorios.
-- Persistencia transaccional de la propuesta en `kpi.kpi_validation` + `kpi.kpi_validation_detail` con estado canónico `PENDING`.
+- Persistencia transaccional de propuestas en `kpi.kpi_validation` + `kpi.kpi_validation_detail` con estado canónico `PENDING`; Spec 04 reutiliza la misma cabecera y persiste `stop_classification_id` para correcciones de tiempos.
 - Persistencia del usuario proponente y timestamp canónicos.
 - Contexto de auditoría (`app.user_id`, `app.source_system`, `app.correlation_id`) establecido en la transacción para alimentar los triggers canónicos de auditoría.
 - Una sola oportunidad por `kpi_result_id` dentro de este micro: pre-check + `pg_advisory_xact_lock` + re-check transaccional.
@@ -21,7 +21,7 @@
 - Aprobación/rechazo y aplicación definitiva del valor propuesto pertenecen al módulo de Aprobación KPI.
 - Validación en línea del número de incidente contra GB Support no está definida por Spec 01.
 - Los códigos oficiales concretos de OEE 1, OEE 2 y OEE completo deben existir como `kpi.kpi_definition.kpi_code`; el micro no inventa códigos.
-- El corte oficial del día OEE y la interpretación exacta de “máximo 24 horas” siguen abiertos en la especificación.
+- Spec 03 confirma **D-1 calendario** e incluye fines de semana/festivos sin saltarlos. Continúan abiertos únicamente el corte oficial del día OEE, la interpretación de “24 horas” si el corte no es medianoche y la autoridad final de timezone.
 - La política cuando el `kpi_result` fuente cambia/recalcula después de crear la propuesta y antes de aprobarla sigue abierta.
 
 ## Observaciones de base de datos

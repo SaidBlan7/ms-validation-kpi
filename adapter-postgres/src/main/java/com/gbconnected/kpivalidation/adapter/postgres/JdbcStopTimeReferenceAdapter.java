@@ -7,18 +7,11 @@ import java.time.*;
 import java.util.*;
 import javax.sql.DataSource;
 
-/** Read-only Spec 04 adapter aligned with canonical DDL v1.2. */
 public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort {
     private final DataSource dataSource;
-    private final Map<String, String> programmingTypeByCode;
 
     public JdbcStopTimeReferenceAdapter(DataSource dataSource) {
-        this(dataSource, Map.of());
-    }
-
-    public JdbcStopTimeReferenceAdapter(DataSource dataSource, Map<String, String> programmingTypeByCode) {
         this.dataSource = Objects.requireNonNull(dataSource);
-        this.programmingTypeByCode = normalizeMapping(programmingTypeByCode);
     }
 
     @Override
@@ -45,6 +38,7 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
                     SELECT c.stop_classification_id,
                            c.classification_code,
                            c.classification_name,
+                           c.oee_stop_type_code,
                            c.is_active
                       FROM stops.stop_classification c
                      WHERE c.organization_id IS NULL
@@ -102,6 +96,7 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
                 SELECT c.stop_classification_id,
                        c.classification_code,
                        c.classification_name,
+                       c.oee_stop_type_code,
                        c.is_active,
                        COALESCE(o.recorded_seconds, 0) AS recorded_seconds,
                        COALESCE(o.fragment_count, 0) AS fragment_count,
@@ -132,7 +127,7 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
                             r.getLong("recorded_seconds"),
                             r.getLong("fragment_count"),
                             r.getLong("stop_event_count"),
-                            programmingType(classificationCode),
+                            normalizeProgrammingType(r.getString("oee_stop_type_code")),
                             aggregateKey(lineId, businessDate, classificationId)));
                 }
                 return List.copyOf(result);
@@ -177,29 +172,21 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
 
     @Override
     public String programmingTypeState() {
-        return programmingTypeByCode.isEmpty() ? "CONFIGURATION_REQUIRED" : "CONFIGURED_BY_CLASSIFICATION_CODE";
+        return "CANONICAL_OEE_STOP_TYPE_CODE";
     }
 
-    private String programmingType(String classificationCode) {
-        if (classificationCode == null) return null;
-        return programmingTypeByCode.get(classificationCode.trim().toUpperCase(Locale.ROOT));
+    @Override
+    public String programmingTypeConfigurationKey() {
+        return "stops.stop_classification.oee_stop_type_code";
+    }
+
+    private static String normalizeProgrammingType(String value) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return Set.of("PROGRAMMED", "UNPROGRAMMED").contains(normalized) ? normalized : normalized;
     }
 
     private static String aggregateKey(long lineId, LocalDate businessDate, long classificationId) {
         return "stops:line:" + lineId + ":date:" + businessDate + ":classification:" + classificationId;
-    }
-
-    private static Map<String, String> normalizeMapping(Map<String, String> raw) {
-        if (raw == null || raw.isEmpty()) return Map.of();
-        Map<String, String> out = new HashMap<>();
-        raw.forEach((code, type) -> {
-            if (code == null || code.isBlank() || type == null || type.isBlank()) return;
-            String normalizedType = type.trim().toUpperCase(Locale.ROOT);
-            if (!Set.of("PROGRAMMED", "UNPROGRAMMED").contains(normalizedType)) {
-                throw new IllegalArgumentException("Unsupported stop programming type for " + code + ": " + type);
-            }
-            out.put(code.trim().toUpperCase(Locale.ROOT), normalizedType);
-        });
-        return Map.copyOf(out);
     }
 }
