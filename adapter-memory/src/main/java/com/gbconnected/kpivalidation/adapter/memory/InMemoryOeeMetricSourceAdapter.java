@@ -16,7 +16,7 @@ public final class InMemoryOeeMetricSourceAdapter implements OeeMetricSourcePort
         }
         return Optional.of(new OeeMetricSnapshot(
                 plantId, lineId, businessDate, metricCode.trim(), new BigDecimal("87.50000000"),
-                "kpi.kpi_result:memory-1"));
+                "kpi.kpi_result:1"));
     }
 
     @Override

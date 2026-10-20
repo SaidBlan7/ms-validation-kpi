@@ -11,7 +11,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         GetStopTimeReferenceUseCase, PrevalidateStopTimeCorrectionUseCase,
         GetMassPerformanceReferenceUseCase, PrevalidateMassPerformanceCorrectionUseCase,
         GetJustificationPolicyUseCase, GetAuditPolicyUseCase, GetWorkflowPolicyUseCase, GetOeeMetricReferenceUseCase,
-        GetValidatorAssignmentPolicyUseCase, GetStopTimePolicyUseCase, GetMassPerformancePolicyUseCase {
+        GetValidatorAssignmentPolicyUseCase, GetStopTimePolicyUseCase, GetMassPerformancePolicyUseCase,
+        SubmitOeeValidationUseCase, GetOeeValidationUseCase, AdministerValidatorAssignmentsUseCase {
 
     private static final String DATE_POLICY_WARNING_CODE = "OEE_BUSINESS_DAY_CUTOFF_PROVISIONAL";
 
@@ -22,6 +23,9 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
     private final MassPerformanceReferencePort massPerformanceReference;
     private final OeeMetricSourcePort oeeMetricSource;
     private final ActorIdentityPort actorIdentity;
+    private final ValidationPersistencePort validationPersistence;
+    private final FeatureActivationPort featureActivation;
+    private final ValidatorAssignmentAdministrationPort validatorAssignmentAdministration;
     private final CorrectionReasonPolicy correctionReasonPolicy;
     private final BusinessDatePolicy businessDatePolicy;
     private final Clock clock;
@@ -37,7 +41,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
             Clock clock,
             String requiredValidatorRole) {
         this(accessScope, context, validatorAssignments, stopTimeReference, massPerformanceReference, oeeMetricSource,
-                ActorIdentityPort.unavailable(), CorrectionReasonPolicy.unbounded(), businessDatePolicy, clock,
+                ActorIdentityPort.unavailable(), ValidationPersistencePort.unavailable(), FeatureActivationPort.enabledByDefault("KPI_OEE_VALIDATION_ENABLED"), ValidatorAssignmentAdministrationPort.unavailable(), CorrectionReasonPolicy.unbounded(), businessDatePolicy, clock,
                 requiredValidatorRole);
     }
 
@@ -52,6 +56,25 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
             BusinessDatePolicy businessDatePolicy,
             Clock clock,
             String requiredValidatorRole) {
+        this(accessScope, context, validatorAssignments, stopTimeReference, massPerformanceReference, oeeMetricSource,
+                actorIdentity, ValidationPersistencePort.unavailable(), FeatureActivationPort.enabledByDefault("KPI_OEE_VALIDATION_ENABLED"), ValidatorAssignmentAdministrationPort.unavailable(), correctionReasonPolicy, businessDatePolicy, clock,
+                requiredValidatorRole);
+    }
+
+    public OeeValidationService(AccessScopePort accessScope,
+            OperationalContextPort context,
+            ValidatorAssignmentPort validatorAssignments,
+            StopTimeReferencePort stopTimeReference,
+            MassPerformanceReferencePort massPerformanceReference,
+            OeeMetricSourcePort oeeMetricSource,
+            ActorIdentityPort actorIdentity,
+            ValidationPersistencePort validationPersistence,
+            FeatureActivationPort featureActivation,
+            ValidatorAssignmentAdministrationPort validatorAssignmentAdministration,
+            CorrectionReasonPolicy correctionReasonPolicy,
+            BusinessDatePolicy businessDatePolicy,
+            Clock clock,
+            String requiredValidatorRole) {
         this.accessScope = Objects.requireNonNull(accessScope);
         this.context = Objects.requireNonNull(context);
         this.validatorAssignments = Objects.requireNonNull(validatorAssignments);
@@ -59,6 +82,9 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         this.massPerformanceReference = Objects.requireNonNull(massPerformanceReference);
         this.oeeMetricSource = Objects.requireNonNull(oeeMetricSource);
         this.actorIdentity = Objects.requireNonNull(actorIdentity);
+        this.validationPersistence = Objects.requireNonNull(validationPersistence);
+        this.featureActivation = Objects.requireNonNull(featureActivation);
+        this.validatorAssignmentAdministration = Objects.requireNonNull(validatorAssignmentAdministration);
         this.correctionReasonPolicy = Objects.requireNonNull(correctionReasonPolicy);
         this.businessDatePolicy = Objects.requireNonNull(businessDatePolicy);
         this.clock = Objects.requireNonNull(clock);
@@ -78,6 +104,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
 
         validateModuleEntitlement(actor, issues);
         validateSpecificKpiAssignment(actor, plantId, issues);
+        validateFeatureActivation(plantId, issues);
 
         // Configuration blockers must not leak plant/line metadata.
         if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
@@ -124,6 +151,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
 
         validateModuleEntitlement(actor, issues);
         validateSpecificKpiAssignment(actor, plantId, issues);
+        validateFeatureActivation(plantId, issues);
         if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
             return temporalResult(plantId, lineId, null, null, null, issues);
         }
@@ -240,6 +268,18 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         }
     }
 
+    private void validateFeatureActivation(long plantId, List<ValidationIssue> issues) {
+        if (!featureActivation.configured()) {
+            issues.add(ValidationIssue.blocker("KPI_OEE_VALIDATION_FEATURE_NOT_CONFIGURED",
+                    "Canonical configuration definition " + featureActivation.configurationCode() + " is not configured"));
+            return;
+        }
+        if (plantId > 0 && !featureActivation.enabledForPlant(plantId)) {
+            issues.add(ValidationIssue.blocker("KPI_OEE_VALIDATION_DISABLED_FOR_PLANT",
+                    "KPI OEE validation is not enabled for the requested plant"));
+        }
+    }
+
     private EligibilityResult result(boolean eligible, long plantId, long lineId, LocalDate businessDate,
             LocalDate expected, String timezone, List<ValidationIssue> issues) {
         boolean entitlementConfigured = validatorAssignments.enforcesRoleCapability()
@@ -266,6 +306,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         }
         List<Long> plants = validatorAssignments.assignedPlants(actor.tenantId(), actor.objectId()).stream()
                 .filter(plantId -> accessScope.hasPlantAccess(actor.tenantId(), actor.objectId(), plantId))
+                .filter(featureActivation::enabledForPlant)
                 .sorted()
                 .toList();
         List<ValidatorPlantAssignmentView> plantAssignments = new ArrayList<>();
@@ -297,24 +338,78 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         return new ValidatorAssignmentPolicyView(
                 canonical ? validatorAssignments.roleCode() : requiredValidatorRole,
                 canonical ? validatorAssignments.capabilityCode() : null,
+                canonical ? validatorAssignmentAdministration.adminCapabilityCode() : null,
                 2,
                 "PLANT_SPECIFIC_KPI_OEE_PERMISSION",
                 "CURRENT_GENERIC_USER_PLANT_ACCESS_REQUIRED",
                 "EXTERNAL_GLOBAL_SUPPLY_CHAIN_APPROVAL",
-                canonical ? "EXTERNAL_ADMIN_WRITES_CANONICAL_APP_SECURITY" : "LOCAL_FIXTURE_CONFIGURATION",
+                canonical ? (validatorAssignmentAdministration.available() ? "IN_MICROSERVICE_CANONICAL_ADMIN_API" : "PENDING_ADMIN_CAPABILITY_REFERENCE_DATA") : "LOCAL_FIXTURE_CONFIGURATION",
                 canonical ? "OPTIONAL_VALID_TO_NULL_MEANS_INDEFINITE" : "CONFIGURATION_LIFETIME",
                 "MULTIPLE_PLANTS_SUPPORTED_NO_GLOBAL_LIMIT",
                 canonical
-                        ? "DETECT_AND_BLOCK_INVALID_PLANT_AT_USE_ADMIN_WRITE_PREVENTION_EXTERNAL"
+                        ? "TRANSACTIONAL_WRITE_TIME_LIMIT_WITH_PLANT_ADVISORY_LOCK"
                         : "LOCAL_CONFIGURATION_REJECTS_MORE_THAN_TWO",
-                canonical ? "CLOSE_USER_ROLE_ASSIGNMENT_VALID_TO" : "REMOVE_LOCAL_ASSIGNMENT_AND_RELOAD",
+                canonical ? "ADMIN_API_CLOSES_USER_ROLE_ASSIGNMENT_VALID_TO" : "REMOVE_LOCAL_ASSIGNMENT_AND_RELOAD",
                 canonical
-                        ? "PARTIAL_CANONICAL_HISTORY_ASSIGNED_BY_REASON_AND_VALIDITY_NO_DEDICATED_REVOKED_BY_FIELD"
+                        ? "CANONICAL_HISTORY_PLUS_AUDIT_CHANGE_LOG_ACTOR_CORRELATION_AND_REASON"
                         : "NO_PERSISTENT_ASSIGNMENT_AUDIT",
-                "PENDING_DEFINITION_AND_VALIDATION_PERSISTENCE",
+                "PENDING_BUSINESS_DEFINITION_VALIDATIONS_REMAIN_PERSISTED",
                 canonical
-                        ? "NOT_TRANSACTIONALLY_PREVENTED_BY_THIS_READ_ONLY_MICRO_POST_WRITE_OVERLIMIT_IS_BLOCKED"
+                        ? "TRANSACTIONALLY_SERIALIZED_BY_PLANT_ADVISORY_LOCK"
                         : "STARTUP_CONFIGURATION_VALIDATION");
+    }
+
+
+    @Override
+    public List<ValidatorAssignmentAdminView> list(ActorContext actor, long plantId) {
+        requireAssignmentAdministrator(actor, plantId);
+        return validatorAssignmentAdministration.list(plantId);
+    }
+
+    @Override
+    public ValidatorAssignmentChangeResult assign(ActorContext actor, AssignValidatorCommand command, String correlationId) {
+        Objects.requireNonNull(command, "command");
+        long actorUserId = requireAssignmentAdministrator(actor, command.plantId());
+        if (command.targetUserId() <= 0) throw new IllegalArgumentException("targetUserId must be positive");
+        if (command.externalApprovalReference() == null || command.externalApprovalReference().isBlank())
+            throw new IllegalArgumentException("externalApprovalReference is required because Direction Global approval remains external");
+        return validatorAssignmentAdministration.assign(actorUserId, command.targetUserId(), command.plantId(), command.validTo(),
+                command.externalApprovalReference(), command.reason(), correlationId);
+    }
+
+    @Override
+    public ValidatorAssignmentChangeResult modify(ActorContext actor, ModifyValidatorAssignmentCommand command, String correlationId) {
+        Objects.requireNonNull(command, "command");
+        long actorUserId = requireAssignmentAdministrator(actor, command.plantId());
+        if (command.targetUserId() <= 0) throw new IllegalArgumentException("targetUserId must be positive");
+        if (command.externalApprovalReference() == null || command.externalApprovalReference().isBlank())
+            throw new IllegalArgumentException("externalApprovalReference is required for assignment modification");
+        return validatorAssignmentAdministration.modify(actorUserId, command.targetUserId(), command.plantId(), command.validTo(),
+                command.externalApprovalReference(), command.reason(), correlationId);
+    }
+
+    @Override
+    public ValidatorAssignmentChangeResult revoke(ActorContext actor, RevokeValidatorAssignmentCommand command, String correlationId) {
+        Objects.requireNonNull(command, "command");
+        long actorUserId = requireAssignmentAdministrator(actor, command.plantId());
+        if (command.targetUserId() <= 0) throw new IllegalArgumentException("targetUserId must be positive");
+        if (command.reason() == null || command.reason().isBlank()) throw new IllegalArgumentException("reason is required for revocation");
+        return validatorAssignmentAdministration.revoke(actorUserId, command.targetUserId(), command.plantId(), command.reason(), correlationId);
+    }
+
+    private long requireAssignmentAdministrator(ActorContext actor, long plantId) {
+        if (!validatorAssignmentAdministration.available())
+            throw new IllegalStateException("KPI OEE validator assignment administration reference data is not configured");
+        if (actor == null || actor.tenantId() == null || actor.objectId() == null)
+            throw new AuthorizationException("Authenticated Entra actor is required");
+        if (plantId <= 0) throw new IllegalArgumentException("plantId must be positive");
+        if (!validatorAssignmentAdministration.canAdminister(actor.tenantId(), actor.objectId(), plantId))
+            throw new AuthorizationException("Actor is not authorized to administer KPI OEE validator assignments for the plant");
+        ActorIdentitySnapshot identity = actorIdentity.findByEntraIdentity(actor.tenantId(), actor.objectId())
+                .orElseThrow(() -> new AuthorizationException("Actor does not have a canonical app_security identity"));
+        if (!identity.active() || identity.canonicalUserId() == null)
+            throw new AuthorizationException("Actor canonical identity is inactive or unresolved");
+        return identity.canonicalUserId();
     }
 
     @Override
@@ -371,15 +466,27 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "No canonical daily line-level KPI result matches metricCode and the provisional local D-1 window"));
             }
         }
-        issues.add(ValidationIssue.warning("VALIDATION_PERSISTENCE_NOT_CONNECTED",
-                "Proposal persistence and PENDING_APPROVAL workflow are pending the KPI persistence contract"));
+        if (metric != null && command.proposedValue() != null && metric.value().compareTo(command.proposedValue()) == 0) {
+            issues.add(ValidationIssue.blocker("PROPOSED_VALUE_MUST_DIFFER",
+                    "proposedValue must differ from the canonical original value"));
+        }
+        if (!validationPersistence.available()) {
+            issues.add(ValidationIssue.warning("VALIDATION_PERSISTENCE_UNAVAILABLE",
+                    "Prevalidation is available, but this runtime cannot persist kpi.kpi_validation proposals"));
+        } else if (metric != null) {
+            long kpiResultId = parseKpiResultId(metric.sourceRecordKey());
+            if (kpiResultId > 0 && validationPersistence.existsForKpiResult(kpiResultId)) {
+                issues.add(ValidationIssue.blocker("OEE_VALUE_ALREADY_VALIDATED",
+                        "This KPI result already has a validation proposal and cannot be modified again"));
+            }
+        }
         boolean valid = issues.stream().noneMatch(i -> i.severity() == Severity.BLOCKER);
-        return new PrevalidationResult(valid, false, command.plantId(), command.lineId(), command.businessDate(),
+        return new PrevalidationResult(valid, valid && validationPersistence.available(), command.plantId(), command.lineId(), command.businessDate(),
                 command.metricCode(), metric == null ? null : metric.value(), command.proposedValue(), justification,
                 auditEvidence(actor), metric == null ? null : metric.sourceRecordKey(),
                 metric == null ? "CANONICAL_KPI_RESULT_NOT_FOUND" : oeeMetricSource.source(),
-                ValidationWorkflowStatus.PENDING_APPROVAL.name(),
-                "PENDING_EXTERNAL_INTEGRATION", List.copyOf(issues));
+                ValidationWorkflowStatus.PENDING.name(),
+                validationPersistence.available() ? "CANONICAL_KPI_VALIDATION_READY" : "UNAVAILABLE", List.copyOf(issues));
     }
 
     @Override
@@ -473,7 +580,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         issues.add(ValidationIssue.warning("MULTI_CLASSIFICATION_VALIDATION_PENDING_DEFINITION",
                 "One classification is prevalidated per request until the workflow owner defines whether multiple classification changes belong to one validation record"));
         issues.add(ValidationIssue.warning("VALIDATION_PERSISTENCE_NOT_CONNECTED",
-                "The correction is not saved and cannot become durably PENDING_APPROVAL until the KPI validation persistence contract is available"));
+                "The correction is not saved and cannot become durably PENDING until the KPI validation persistence contract is available"));
 
         boolean valid = issues.stream().noneMatch(i -> i.severity() == Severity.BLOCKER);
         return new StopTimeCorrectionPrevalidationResult(valid, false, command.plantId(), command.lineId(),
@@ -488,7 +595,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 observed != null && observed.programmingType() != null
                         ? stopTimeReference.programmingTypeState()
                         : "MAPPING_INCOMPLETE",
-                ValidationWorkflowStatus.PENDING_APPROVAL.name(),
+                ValidationWorkflowStatus.PENDING.name(),
                 "PENDING_EXTERNAL_INTEGRATION", List.copyOf(issues));
     }
 
@@ -504,7 +611,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "SERVER_REVALIDATES_CANONICAL_AGGREGATE_AND_REJECTS_STALE_ORIGINAL",
                 "PENDING_FUNCTIONAL_DEFINITION",
                 "ONE_CLASSIFICATION_PER_PREVALIDATION_PENDING_WORKFLOW_GROUPING_DEFINITION",
-                ValidationWorkflowStatus.PENDING_APPROVAL.name(),
+                ValidationWorkflowStatus.PENDING.name(),
                 "PENDING_KPI_VALIDATION_PERSISTENCE");
     }
 
@@ -558,7 +665,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "PRESERVE_CANONICAL_DECIMALS_NO_APPLICATION_ROUNDING_PENDING_DEFINITION",
                 "PENDING_FUNCTIONAL_DEFINITION",
                 "RECHECK_BEFORE_SUBMISSION; POST_PERSISTENCE_PRECEDENCE_PENDING_DEFINITION",
-                ValidationWorkflowStatus.PENDING_APPROVAL.name(),
+                ValidationWorkflowStatus.PENDING.name(),
                 "PENDING_KPI_VALIDATION_PERSISTENCE");
     }
 
@@ -635,14 +742,14 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         issues.add(ValidationIssue.warning("LATE_AUTOMATIC_DATA_POST_PERSISTENCE_PRECEDENCE_PENDING",
                 "The server rechecks the source before submission, but Spec 05 does not define what wins if automatic data changes after a validation proposal has already been persisted"));
         issues.add(ValidationIssue.warning("VALIDATION_PERSISTENCE_NOT_CONNECTED",
-                "The correction is not saved and cannot enter durable PENDING_APPROVAL until the KPI validation persistence contract is available"));
+                "The correction is not saved and cannot enter durable PENDING until the KPI validation persistence contract is available"));
 
         boolean valid = issues.stream().noneMatch(i -> i.severity() == Severity.BLOCKER);
         return new MassPerformanceCorrectionPrevalidationResult(valid, false, command.plantId(), command.lineId(),
                 command.businessDate(), command.uomId(), command.variable(),
                 command.originalValue(), command.proposedValue(), observedReferenceValue,
                 originalMatchesOperationalReference, sourceAggregateKey, sourceType, justification,
-                auditEvidence(actor), massPerformanceReference.source(), ValidationWorkflowStatus.PENDING_APPROVAL.name(),
+                auditEvidence(actor), massPerformanceReference.source(), ValidationWorkflowStatus.PENDING.name(),
                 "PENDING_EXTERNAL_INTEGRATION", List.copyOf(issues));
     }
 
@@ -708,7 +815,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 canonical == null ? actorIdentity.source() : canonical.source(),
                 Instant.now(clock),
                 "ABSOLUTE_INSTANT_UTC",
-                "PREVALIDATION_EVIDENCE_ONLY_PENDING_PERSISTENCE");
+                validationPersistence.available() ? "CANONICAL_VALIDATION_PERSISTENCE_AVAILABLE" : "PREVALIDATION_ONLY");
     }
 
     @Override
@@ -721,10 +828,65 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "APP_SECURITY_SNAPSHOT_THEN_AUTHENTICATION_CLAIM_FALLBACK",
                 "ABSOLUTE_INSTANT_UTC",
                 "PENDING_PRESENTATION_TIMEZONE_DEFINITION",
-                "PENDING_KPI_VALIDATION_PERSISTENCE",
-                "READY_WHEN_SNAPSHOT_IS_PERSISTED_WITH_VALIDATION",
+                validationPersistence.available() ? "IMPLEMENTED_KPI_VALIDATION_AUDIT_TRIGGERS" : "UNAVAILABLE",
+                validationPersistence.available() ? "CANONICAL_USER_AND_TIMESTAMP_PERSISTED" : "PREVALIDATION_ONLY",
                 "PENDING_DEFINITION",
-                "PENDING_APPROVAL_AND_REPORTING_INTEGRATION");
+                "APPROVAL_AND_REPORTING_RECONCILIATION_OWNED_BY_DEPENDENT_MODULES");
+    }
+
+    @Override
+    public OeeValidationResult submit(ActorContext actor, PrevalidateOeeCorrectionCommand command, String correlationId) {
+        PrevalidationResult pre = prevalidate(actor, command);
+        if (!pre.businessRulesValid() || !pre.readyForSubmission()) {
+            throw new DomainValidationException("OEE validation proposal does not satisfy Spec 01 business rules");
+        }
+        ValidationAuditEvidenceView evidence = auditEvidence(actor);
+        if (evidence.canonicalUserId() == null || !Boolean.TRUE.equals(evidence.accountActiveSnapshot())) {
+            throw new AuthorizationException("Canonical active app_security.user_identity is required to persist a validation");
+        }
+        long kpiResultId = parseKpiResultId(pre.sourceRecordKey());
+        if (kpiResultId <= 0) throw new IllegalStateException("Canonical kpi_result_id could not be resolved");
+        PlantContext plant = context.findPlant(command.plantId()).orElseThrow(() -> new IllegalStateException("Plant not found"));
+        ZoneId zone = ZoneId.of(plant.timezoneName());
+        Instant now = clock.instant();
+        Instant expiresAt = ZonedDateTime.now(clock.withZone(zone)).toLocalDate().plusDays(1).atStartOfDay(zone).minusSeconds(1).toInstant();
+        if (expiresAt.isBefore(now)) expiresAt = now;
+        CorrectionJustificationView j = pre.justification();
+        ValidationPersistenceRequest request = new ValidationPersistenceRequest(
+                command.plantId(), command.lineId(), command.businessDate(), command.metricCode().trim(), kpiResultId,
+                pre.originalValue(), command.proposedValue(), null, command.reasonType(), null,
+                j == null ? null : j.operationalCause(), j == null ? null : j.actionPlan(),
+                j == null ? null : j.incidentNumber(), evidence.canonicalUserId(), now, expiresAt, correlationId);
+        return validationPersistence.create(request);
+    }
+
+    @Override
+    public OeeValidationResult get(ActorContext actor, long validationId) {
+        if (validationId <= 0) throw new IllegalArgumentException("validationId must be positive");
+        OeeValidationResult result = validationPersistence.findById(validationId)
+                .orElseThrow(() -> new ValidationNotFoundException("Validation not found"));
+        List<ValidationIssue> issues = new ArrayList<>();
+        validateModuleEntitlement(actor, issues);
+        validateSpecificKpiAssignment(actor, result.plantId(), issues);
+        validateFeatureActivation(result.plantId(), issues);
+        if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
+            throw new AuthorizationException("Actor is not authorized for KPI OEE validation");
+        }
+        if (!accessScope.hasPlantAccess(actor.tenantId(), actor.objectId(), result.plantId())) {
+            throw new AuthorizationException("Actor is not authorized for the validation plant scope");
+        }
+        if (result.lineId() != null && !context.lineBelongsToPlant(result.lineId(), result.plantId())) {
+            throw new AuthorizationException("Validation line is outside the authorized plant");
+        }
+        return result;
+    }
+
+    private static long parseKpiResultId(String sourceRecordKey) {
+        if (sourceRecordKey == null) return -1;
+        int idx = sourceRecordKey.lastIndexOf(':');
+        if (idx < 0 || idx == sourceRecordKey.length() - 1) return -1;
+        try { return Long.parseLong(sourceRecordKey.substring(idx + 1)); }
+        catch (NumberFormatException ex) { return -1; }
     }
 
     private static String firstNonBlank(String... values) {
@@ -738,12 +900,12 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
     public WorkflowPolicyView getWorkflowPolicy() {
         return new WorkflowPolicyView(
                 Arrays.stream(ValidationWorkflowStatus.values()).map(Enum::name).toList(),
-                ValidationWorkflowStatus.PENDING_APPROVAL.name(),
+                ValidationWorkflowStatus.PENDING.name(),
                 "KPI_RESULT_ID",
-                "PENDING_KPI_VALIDATION_PERSISTENCE",
-                "CONTRACT_DEFINED_REQUIRES_PERSISTENT_UNIQUENESS",
-                "CONTRACT_DEFINED_REQUIRES_TRANSACTIONAL_PERSISTENCE",
-                "PENDING_APPROVAL_MODULE_CONTRACT");
+                validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION" : "UNAVAILABLE",
+                "IMPLEMENTED_SERVICE_TRANSACTION_GUARD_DB_UNIQUE_RECOMMENDED",
+                "IMPLEMENTED_POSTGRES_ADVISORY_LOCK",
+                "APPROVAL_MODULE_OWNS_APPROVE_REJECT_AND_EFFECTIVE_APPLICATION");
     }
 
     @Override
@@ -768,7 +930,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 correctionReasonPolicy.incidentNumberRegex(),
                 "PENDING_EXTERNAL_INTEGRATION",
                 "PENDING_DEFINITION",
-                "PENDING_KPI_VALIDATION_PERSISTENCE");
+                validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION" : "UNAVAILABLE");
     }
 
     @Override
@@ -781,6 +943,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 : "PENDING_CONFIGURATION";
         return List.of(
                 new CapabilityView("authentication", "IMPLEMENTED", "Entra identity is required when security is enabled"),
+                new CapabilityView("plantFeatureActivation", featureActivation.configured() ? "IMPLEMENTED_CANONICAL" : "PENDING_REFERENCE_DATA",
+                        "Plant feature flag resolved from " + featureActivation.source() + " using code " + featureActivation.configurationCode()),
                 new CapabilityView("plantLineScope", "IMPLEMENTED_V1_2", "Validated through app_security.user_identity + current user_plant_access and current core.line_plant_assignment"),
                 new CapabilityView("validatorEntitlement", entitlement,
                         validatorAssignments.enforcesRoleCapability()
@@ -792,18 +956,18 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                                 : "Canonical role/capability reference data or local assignment configuration is required"),
                 new CapabilityView("maxTwoValidatorsPerPlant", assignments,
                         validatorAssignments.configured()
-                                ? "Every operation rejects a plant with more than two effective validators (current KPI role/capability plus current generic plant access); write-time prevention remains external"
+                                ? "Admin write path serializes by plant and rejects a third effective validator; operational requests also fail closed if canonical data is already over limit"
                                 : "Validator assignment source is not configured"),
                 new CapabilityView("assignmentRevocation", assignments,
                         validatorAssignments.enforcesRoleCapability()
                                 ? "Closing user_role_assignment.valid_to revokes the canonical plant assignment without redeploy"
                                 : "Remove the external assignment and restart/redeploy"),
-                new CapabilityView("assignmentChangeAudit", validatorAssignments.enforcesRoleCapability() ? "IMPLEMENTED_PARTIAL_CANONICAL_HISTORY" : "PENDING_EXTERNAL_INTEGRATION",
+                new CapabilityView("assignmentChangeAudit", validatorAssignments.enforcesRoleCapability() && validatorAssignmentAdministration.available() ? "IMPLEMENTED_CANONICAL_AUDIT" : "PENDING_EXTERNAL_INTEGRATION",
                         validatorAssignments.enforcesRoleCapability()
-                                ? "app_security.user_role_assignment preserves assigned_by_user_id/reason and validity history, but the v1.2 table has no dedicated revoked_by field and this micro does not administer writes"
+                                ? "Admin writes set audit.change_log session actor/source/correlation; user_role_assignment preserves assigned_by_user_id, reason and validity history"
                                 : "Assignment administration is external"),
                 new CapabilityView("assignmentPolicyContract", "IMPLEMENTED_SPEC_02",
-                        "GET /assignments/policy exposes semantic role/capability, max two, external approval, optional valid_to expiry, multi-plant support and the remaining administration constraints"),
+                        "Spec 02 supports policy, self-scope, admin list, assign, modify and revoke; external approval remains outside GBC but its reference is mandatory on assign/modify"),
                 new CapabilityView("pendingValidationOnRevocation", "PENDING_DEFINITION",
                         "Spec 02 leaves behavior for pending validations undefined"),
                 new CapabilityView("previousDayRule", "IMPLEMENTED_PROVISIONAL",
@@ -820,8 +984,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Uses core.plant.timezone_name until the authoritative timezone rule is confirmed; invalid/blank timezone configuration is blocked safely"),
                 new CapabilityView("reasonValidation", "IMPLEMENTED_SPEC_06",
                         "Only SYSTEM/OPERATIVE are accepted; SYSTEM requires incidentNumber, OPERATIVE requires cause/action plan, text is normalized and stale fields from a changed reason are discarded"),
-                new CapabilityView("justificationPersistence", "PENDING_EXTERNAL_INTEGRATION",
-                        "Spec 06 requires atomic persistence with the validation, but no KPI validation persistence contract/table is available"),
+                new CapabilityView("justificationPersistence", validationPersistence.available() ? "IMPLEMENTED_CANONICAL" : "UNAVAILABLE",
+                        "Reason type and applicable incident/cause/action-plan evidence are persisted atomically in kpi.kpi_validation"),
                 new CapabilityView("gbSupportIncidentValidation", correctionReasonPolicy.incidentRegexConfigured() ? "IMPLEMENTED_LOCAL_FORMAT_ONLY" : "PENDING_DEFINITION",
                         correctionReasonPolicy.incidentRegexConfigured()
                                 ? "Configured incident regex is enforced locally; online validation against GB Support remains pending"
@@ -864,20 +1028,20 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Canonical decimals are preserved without application rounding until the official precision/rounding rule is defined"),
                 new CapabilityView("lateAutomaticMassDataPrecedence", "IMPLEMENTED_PARTIAL",
                         "Source is rechecked before submission; precedence for automatic changes after a proposal is durably persisted remains undefined"),
-                new CapabilityView("validationAuditEvidence", "IMPLEMENTED_PREVALIDATION_ONLY",
-                        "Spec 07 prevalidation responses include immutable Entra tid+oid, canonical app_security.user_id when available, account/display/principal snapshots and the absolute event instant; persistence is still pending"),
+                new CapabilityView("validationAuditEvidence", "IMPLEMENTED_CANONICAL",
+                        "Canonical app_security.user_id and proposed_at are persisted on kpi.kpi_validation; audit triggers capture actor/source/correlation context"),
                 new CapabilityView("auditTimestampSemantics", "IMPLEMENTED",
                         "Spec 07 represents the validation/prevalidation event time as an absolute UTC Instant so a later presentation timezone cannot change the recorded instant"),
-                new CapabilityView("persistedAuditReconciliation", "PENDING_EXTERNAL_INTEGRATION",
-                        "Persisted actor/timestamp reconciliation across Validation, Approval and reports requires the KPI validation persistence contract"),
+                new CapabilityView("persistedAuditReconciliation", "IMPLEMENTED_FOR_VALIDATION_STEP",
+                        "Validation proposal actor/timestamp are persisted; Approval/report reconciliation remains owned by their dependent modules"),
                 new CapabilityView("oeeOriginalValueSource", "IMPLEMENTED_READ_ONLY_V1_2",
                         "Reads the latest canonical kpi.kpi_result for the requested kpi_definition.kpi_code when its line-level period exactly matches the provisional local D-1 window"),
-                new CapabilityView("validationWorkflowContract", "IMPLEMENTED_SEMANTIC_CONTRACT",
-                        "Internal states are PENDING_APPROVAL, APPROVED and REJECTED; a valid new proposal targets PENDING_APPROVAL when persistence becomes available"),
-                new CapabilityView("proposalPersistence", "PENDING_EXTERNAL_INTEGRATION",
-                        "No KPI validation persistence contract/table is available"),
-                new CapabilityView("singleModificationPerDatum", "PENDING_EXTERNAL_INTEGRATION",
-                        "Requires persistent identity/uniqueness of the source OEE datum"),
+                new CapabilityView("validationWorkflowContract", "IMPLEMENTED_CANONICAL",
+                        "Canonical statuses are PENDING, APPROVED, REJECTED and EXPIRED; new proposals are persisted as PENDING"),
+                new CapabilityView("proposalPersistence", validationPersistence.available() ? "IMPLEMENTED_CANONICAL" : "UNAVAILABLE",
+                        "Persists kpi.kpi_validation and kpi.kpi_validation_detail atomically"),
+                new CapabilityView("singleModificationPerDatum", "IMPLEMENTED_SERVICE_GUARD",
+                        "Uses kpi_result_id identity, transactional advisory lock and existing-detail check; a DB UNIQUE constraint is still recommended"),
                 new CapabilityView("approvalWorkflow", "PENDING_DEPENDENCY",
                         "KPI Approval remains the second-stage dependency")
         );

@@ -4,7 +4,7 @@
 
 - Las prevalidaciones OEE general, tiempos y masas devuelven `auditEvidence`.
 - Identificador inmutable externo: combinación `Entra tenant id (tid) + object id (oid)`.
-- En PostgreSQL/Lakebase también se resuelve `app_security.user_identity.user_id` como `canonicalUserId`, dejando preparado el FK que una futura entidad de validación necesitaría.
+- En PostgreSQL/Lakebase también se resuelve `app_security.user_identity.user_id` como `canonicalUserId`, y se usa como FK canónico en las validaciones OEE persistidas y en la auditoría de administración Spec 02.
 - El snapshot canónico consulta `display_name`, `corporate_email` e `is_active` desde `app_security.user_identity`; nombre/principal del token se usan como fallback si el catálogo no trae esos datos.
 - Se conservan `actorTenantId`, `actorObjectId`, `immutableActorId`, `canonicalUserId`, `displayNameSnapshot`, `principalNameSnapshot`, `accountActiveSnapshot` e `identitySource`.
 - `eventTimestamp` se genera con el `Clock` del servicio como `Instant` y se serializa ISO-8601/UTC, preservando el instante absoluto.
@@ -26,7 +26,7 @@
 
 ## Decisión de implementación
 
-La Spec 07 habla de una validación registrada, pero el micro aún no dispone del contrato de persistencia KPI. Por ello `auditEvidence.evidencePersistenceState` sigue siendo `PREVALIDATION_EVIDENCE_ONLY_PENDING_PERSISTENCE`. No se presenta el timestamp de prevalidación como si fuera un registro histórico guardado. Cuando exista persistencia, el mismo snapshot puede almacenarse de forma inmutable y reutilizarse en Aprobación/Reportes.
+La prevalidación sigue exponiendo evidencia previa al guardado, pero la creación de una validación OEE ya persiste `proposed_by_user_id` y `proposed_at` en `kpi.kpi_validation`, y la consulta de detalle recupera esa evidencia canónica. La administración Spec 02 también deja actor/correlación en `audit.change_log`.
 
 ## Base de datos
 

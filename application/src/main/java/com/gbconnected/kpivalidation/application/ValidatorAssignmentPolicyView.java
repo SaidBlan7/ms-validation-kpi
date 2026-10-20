@@ -3,6 +3,7 @@ package com.gbconnected.kpivalidation.application;
 public record ValidatorAssignmentPolicyView(
         String roleCode,
         String capabilityCode,
+        String administrationCapabilityCode,
         int maxValidatorsPerPlant,
         String assignmentScope,
         String genericPlantAccessRequirement,

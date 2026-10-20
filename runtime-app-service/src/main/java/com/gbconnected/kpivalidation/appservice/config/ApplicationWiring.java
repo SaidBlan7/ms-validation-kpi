@@ -12,9 +12,12 @@ public class ApplicationWiring {
 
     @Bean CheckEligibilityUseCase eligibility(MicroserviceRuntime runtime) { return runtime.eligibility(); }
     @Bean PrevalidateOeeCorrectionUseCase prevalidation(MicroserviceRuntime runtime) { return runtime.prevalidation(); }
+    @Bean SubmitOeeValidationUseCase submission(MicroserviceRuntime runtime) { return runtime.submission(); }
+    @Bean GetOeeValidationUseCase validationDetail(MicroserviceRuntime runtime) { return runtime.validationDetail(); }
     @Bean CapabilitiesUseCase capabilities(MicroserviceRuntime runtime) { return runtime.capabilities(); }
     @Bean GetMyValidatorAssignmentsUseCase validatorAssignments(MicroserviceRuntime runtime) { return runtime.validatorAssignments(); }
     @Bean GetValidatorAssignmentPolicyUseCase validatorAssignmentPolicy(MicroserviceRuntime runtime) { return runtime.validatorAssignmentPolicy(); }
+    @Bean AdministerValidatorAssignmentsUseCase validatorAssignmentAdministration(MicroserviceRuntime runtime) { return runtime.validatorAssignmentAdministration(); }
     @Bean GetTemporalContextUseCase temporalContext(MicroserviceRuntime runtime) { return runtime.temporalContext(); }
     @Bean GetOeeMetricReferenceUseCase oeeMetricReference(MicroserviceRuntime runtime) { return runtime.oeeMetricReference(); }
     @Bean GetStopTimeReferenceUseCase stopTimeReference(MicroserviceRuntime runtime) { return runtime.stopTimeReference(); }

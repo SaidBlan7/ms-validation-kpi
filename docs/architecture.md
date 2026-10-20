@@ -28,15 +28,15 @@ Specs 04-05 are also migrated to physical v1.2. Spec 04 reads the canonical stop
 
 ## Deliberate KPI boundary
 
-The service does not create or write KPI validation tables. The supplied canonical DB does not provide the persistence/workflow needed to save a validation proposal, guarantee one modification per datum, enter `PENDING_APPROVAL`, reconcile Approval KPI, or retain the Spec 07 audit snapshot historically.
+Spec 01 writes validation proposals to canonical `kpi.kpi_validation` and `kpi.kpi_validation_detail`. New proposals enter physical status `PENDING`; proposal creation stores canonical user/timestamp and sets transaction-local audit context for the existing audit triggers. Approval/rejection and effective KPI application remain owned by the Approval KPI module.
 
-`OeeMetricSourcePort` is now backed by canonical v1.2 `kpi.kpi_result` for Spec 01. `ValidationPersistencePort` remains an external boundary because the v1.2 DDL still has no KPI-validation proposal/approval workflow table.
+`OeeMetricSourcePort` is backed by canonical `kpi.kpi_result`. `ValidationPersistencePort` is implemented by `JdbcValidationPersistenceAdapter` over `kpi.kpi_validation` and `kpi.kpi_validation_detail`.
 
 Canonical v1.2 authorization uses `app_security.user_role_assignment` as the plant-scoped validator assignment and verifies the role-capability relationship. Semantic defaults are `KPI_OEE_VALIDATOR` / `KPI_OEE_VALIDATION`; they are configuration, not hard-coded business truth. Generic `user_plant_access` remains an independent minimum-privilege requirement. `GBC_KPI_VALIDATOR_ASSIGNMENTS` exists only as a memory/local fixture.
 
 The service checks the Spec 01 maximum of two active validators on each plant-scoped operation. This detects and blocks invalid canonical reference data but cannot prevent an administrator or another service from inserting a third assignment because this micro is read-only and the canonical DDL has no corresponding exclusion/unique rule.
 
-The workflow state vocabulary is modeled internally as `PENDING_APPROVAL`, `APPROVED`, `REJECTED`. It is a contract only: `PENDING_APPROVAL` becomes real only when a persistence owner/API/table exists. Source identity for future uniqueness/concurrency is `kpi_result_id`.
+The workflow vocabulary mirrors canonical `kpi.kpi_validation.status_code`: `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`. `kpi_result_id` is the source identity. The service uses a PostgreSQL advisory transaction lock plus an existence check to serialize concurrent proposals; a physical UNIQUE constraint is still recommended to protect against external writers.
 
 Spec 03 uses `core.plant.timezone_name` as the current provisional authority and implements the explicit D-1 calendar rule from the specification. Temporal context includes the next local-midnight expiry of the current D-1 selection and server-side revalidation is mandatory on every operation. Invalid timezone configuration is returned as a controlled blocker. Exact elapsed-24-hour/OEE-cutoff semantics remain a functional dependency rather than being inferred.
 

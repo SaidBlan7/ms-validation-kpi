@@ -24,7 +24,7 @@
 
 ## Pendiente / dependencia externa
 
-- Persistir la justificación de forma atómica con la propuesta de validación.
+- Para OEE general, la justificación ya se persiste atómicamente en `kpi.kpi_validation`; Stop Time y Mass Performance continúan sólo en prevalidación hasta definir su persistencia canónica.
 - Mostrar la justificación desde Aprobación KPI e histórico/auditoría persistente.
 - Valores oficiales de longitud UX si se desea que la configuración sea canónica y no sólo técnica.
 - Patrón/formato oficial del número de incidente si no se acepta configuración local.

@@ -19,7 +19,7 @@
 - Si no existe fila canónica para el dato solicitado, se bloquea con `MASS_ORIGINAL_VALUE_NOT_FOUND`; no se convierte ausencia a cero porque esta spec corrige datos existentes y no es KPI Manual.
 - Identidad futura de persistencia: `mass:line:<id>:date:<D-1>:variable:<...>:uom:<id>`.
 - Justificación Spec 06 y evidencia Spec 07 incluidas.
-- `targetStatusIfPersisted=PENDING_APPROVAL` sin afirmar persistencia real.
+- `targetStatusIfPersisted=PENDING` usando el estado canónico, sin afirmar persistencia real para el flujo de masas.
 - Nuevo `GET /api/v1/oee-validation/masses/policy` en App Service y Azure Functions.
 - App Service, Functions, OpenAPI y capabilities alineados.
 - Sin INSERT/UPDATE/DELETE ni DDL sobre la base canónica.
@@ -31,7 +31,7 @@
 - Regla permitida entre masa elaborada y entregada, especialmente para condimento, conversión, molido/tostado u otras lógicas especiales.
 - Precisión decimal y redondeo oficiales; actualmente se preserva el decimal canónico sin redondeo adicional.
 - Precedencia cuando el dato automático cambia después de que una propuesta ya fue persistida. Antes de persistir se detecta stale y se bloquea.
-- Persistencia de la propuesta, una sola modificación durable, `PENDING_APPROVAL` real, Approval KPI e impacto posterior sobre rendimiento.
+- La persistencia canónica de Spec 01 ya existe para `kpi_result`; falta definir la representación durable de una corrección de masa (`line + date + variable + UOM`) antes de crear un `PENDING` real para Spec 05. Approval KPI e impacto posterior sobre rendimiento siguen separados.
 - Auditoría persistente/consulta histórica de una validación guardada.
 
 ## Decisiones conservadoras

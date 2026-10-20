@@ -222,7 +222,7 @@ class OeeValidationServiceTest {
         assertEquals(600L, result.observedOriginalSeconds());
         assertTrue(result.originalMatchesReference());
         assertEquals(540L, result.proposedSeconds());
-        assertEquals("PENDING_APPROVAL", result.targetStatusIfPersisted());
+        assertEquals("PENDING", result.targetStatusIfPersisted());
         assertEquals("stops:line:10:date:2026-10-08:classification:100", result.sourceAggregateKey());
     }
 
@@ -244,7 +244,7 @@ class OeeValidationServiceTest {
         assertEquals("LINE_DATE_STOP_CLASSIFICATION_AGGREGATE", policy.sourceIdentityStrategy());
         assertEquals(List.of("PROGRAMMED", "UNPROGRAMMED"), policy.supportedProgrammingTypes());
         assertEquals("PENDING_FUNCTIONAL_DEFINITION", policy.totalConsistencyPolicy());
-        assertEquals("PENDING_APPROVAL", policy.targetStatusIfPersisted());
+        assertEquals("PENDING", policy.targetStatusIfPersisted());
     }
 
     @Test
@@ -290,7 +290,7 @@ class OeeValidationServiceTest {
         assertFalse(result.readyForSubmission());
         assertEquals(new BigDecimal("1210.25"), result.observedReferenceValue());
         assertTrue(result.originalMatchesOperationalReference());
-        assertEquals("PENDING_APPROVAL", result.targetStatusIfPersisted());
+        assertEquals("PENDING", result.targetStatusIfPersisted());
         assertEquals("mass:line:10:date:2026-10-08:variable:DELIVERED_MASS:uom:10", result.sourceAggregateKey());
     }
 
@@ -358,7 +358,7 @@ class OeeValidationServiceTest {
         assertEquals("LINE_DATE_VARIABLE_UOM_AGGREGATE", policy.sourceIdentityStrategy());
         assertEquals(List.of("ELABORATED_MASS", "DELIVERED_MASS"), policy.supportedVariables());
         assertEquals("PENDING_FUNCTIONAL_DEFINITION", policy.relationPolicy());
-        assertEquals("PENDING_APPROVAL", policy.targetStatusIfPersisted());
+        assertEquals("PENDING", policy.targetStatusIfPersisted());
     }
 
     @Test
@@ -432,19 +432,19 @@ class OeeValidationServiceTest {
         assertEquals("validator.a@example.test", result.auditEvidence().principalNameSnapshot());
         assertEquals(Instant.parse("2026-10-09T18:00:00Z"), result.auditEvidence().eventTimestamp());
         assertEquals("ABSOLUTE_INSTANT_UTC", result.auditEvidence().timestampSemantics());
-        assertEquals("PREVALIDATION_EVIDENCE_ONLY_PENDING_PERSISTENCE",
+        assertEquals("PREVALIDATION_ONLY",
                 result.auditEvidence().evidencePersistenceState());
-        assertEquals("PENDING_APPROVAL", result.targetStatusIfPersisted());
+        assertEquals("PENDING", result.targetStatusIfPersisted());
         assertFalse(result.readyForSubmission());
     }
 
     @Test
     void spec01ExposesSemanticWorkflowContractWithoutClaimingPersistence() {
         var policy = service(true).getWorkflowPolicy();
-        assertEquals(List.of("PENDING_APPROVAL", "APPROVED", "REJECTED"), policy.statuses());
-        assertEquals("PENDING_APPROVAL", policy.initialStatusWhenPersisted());
+        assertEquals(List.of("PENDING", "APPROVED", "REJECTED", "EXPIRED"), policy.statuses());
+        assertEquals("PENDING", policy.initialStatusWhenPersisted());
         assertEquals("KPI_RESULT_ID", policy.sourceIdentityStrategy());
-        assertEquals("PENDING_KPI_VALIDATION_PERSISTENCE", policy.persistenceState());
+        assertEquals("UNAVAILABLE", policy.persistenceState());
     }
 
     @Test
@@ -470,7 +470,7 @@ class OeeValidationServiceTest {
         assertEquals("ENTRA_CLAIMS_ONLY", policy.canonicalUserIdentitySource());
         assertEquals("ABSOLUTE_INSTANT_UTC", policy.timestampSemantics());
         assertEquals("PENDING_PRESENTATION_TIMEZONE_DEFINITION", policy.displayTimezoneState());
-        assertEquals("PENDING_KPI_VALIDATION_PERSISTENCE", policy.persistenceState());
+        assertEquals("UNAVAILABLE", policy.persistenceState());
     }
 
 }

@@ -3,7 +3,7 @@
 ## Current source status
 
 - Specs 01-04 fueron revisadas nuevamente sobre el ZIP integrado y conservan sus garantías previas.
-- Spec 01: identidad/scope canónico, OEE original desde `kpi.kpi_result`, original/propuesto, justificación/evidencia y contrato `PENDING_APPROVAL` sin fingir persistencia.
+- Spec 01: identidad/scope canónico, activación por planta, OEE original desde `kpi.kpi_result`, original/propuesto, justificación/evidencia y persistencia real en `kpi.kpi_validation` + detalle con estado `PENDING`.
 - Spec 02: entitlement KPI específico por planta con role/capability v1.2, acceso genérico independiente y bloqueo operativo si la planta excede dos validadores efectivos.
 - Spec 03: D-1 calendario local, fines de semana/festivos incluidos, revalidación server-side y expiración de contexto al siguiente midnight local.
 - Spec 04: `stops` v1.2, agregado por clasificación, original server-side, mapping PROGRAMMED/UNPROGRAMMED configurable y conservación histórica provisional.

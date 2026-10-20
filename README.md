@@ -56,6 +56,7 @@ En PostgreSQL/Lakebase v1.2, la autorización funcional ya se resuelve desde `ap
 
 - role code: `KPI_OEE_VALIDATOR` (`GBC_KPI_VALIDATOR_ROLE_CODE`)
 - capability code: `KPI_OEE_VALIDATION` (`GBC_KPI_VALIDATOR_CAPABILITY_CODE`)
+- admin capability code: `KPI_OEE_VALIDATOR_ASSIGNMENT_ADMIN` (`GBC_KPI_VALIDATOR_ADMIN_CAPABILITY_CODE`)
 
 El acceso funcional requiere simultáneamente:
 
@@ -67,7 +68,7 @@ El acceso funcional requiere simultáneamente:
 
 Cada operación valida además que la planta no tenga más de dos **validadores OEE efectivos**. El conteo exige asignación KPI/capability vigente **y** `user_plant_access` vigente, para que un rol residual sin acceso general no consuma uno de los dos lugares. Como el DDL v1.2 no incluye un constraint que impida crear una tercera asignación, este micro detecta la configuración inválida y bloquea el uso de la planta; la prevención transaccional en el write path administrativo queda fuera de su ownership.
 
-`GET /api/v1/oee-validation/assignments/policy` documenta las decisiones interinas de Spec 02: aprobación de Dirección Global externa, administración externa, `valid_to` opcional (`NULL` = indefinido), múltiples plantas por usuario sin límite global y revocación mediante cierre de `user_role_assignment.valid_to`. `GET /assignments/me` incluye por planta el conteo efectivo y lugares restantes.
+`GET /api/v1/oee-validation/assignments/policy` documenta la política Spec 02. La aprobación de Dirección Global sigue siendo externa, pero la administración técnica ya está implementada en este micro: alta, modificación, revocación, máximo de dos con serialización transaccional por planta y auditoría canónica. `GET /assignments/me` mantiene la visibilidad del validador y `GET /assignments?plantId=...` expone la vista administrativa.
 
 En `memory` se conserva `GBC_KPI_VALIDATOR_ASSIGNMENTS` como fixture local y `GBC_KPI_VALIDATOR_ROLE` como role claim simulado. `AUTH_MODE=mock` sigue habilitado únicamente para desarrollo local.
 
@@ -94,6 +95,7 @@ La interpretación exacta de “máximo 24 hrs”, el corte oficial del día OEE
 | `AUTH_MODE` | `entra` por defecto; `mock` sólo para desarrollo local |
 | `GBC_KPI_VALIDATOR_ROLE_CODE` | role_code canónico; default semántico `KPI_OEE_VALIDATOR` |
 | `GBC_KPI_VALIDATOR_CAPABILITY_CODE` | capability_code canónico; default semántico `KPI_OEE_VALIDATION` |
+| `GBC_KPI_VALIDATOR_ADMIN_CAPABILITY_CODE` | capability_code para administrar asignaciones Spec 02; default semántico `KPI_OEE_VALIDATOR_ASSIGNMENT_ADMIN` |
 | `GBC_KPI_VALIDATOR_ROLE` | role claim usado sólo en modo local/external-config |
 | `GBC_KPI_VALIDATOR_ASSIGNMENTS` | fixture de asignaciones usado sólo en `memory` |
 | `GBC_STOP_PROGRAMMING_TYPE_BY_CODE` | mapping explícito `classificationCode=PROGRAMMED|UNPROGRAMMED`; acepta múltiples entradas separadas por coma o punto y coma |
@@ -114,8 +116,8 @@ GBC_KPI_VALIDATOR_ASSIGNMENTS=1=<tenant>/<oid1>,<tenant>/<oid2>;2=<tenant>/<oid1
 ## Importante
 
 - Todavía no existe `POST /validations`: no hay persistencia KPI disponible y el servicio no simula guardar propuestas.
-- `prevalidate` ya resuelve el valor OEE/KPI original desde `kpi.kpi_result`, devuelve `sourceRecordKey` y declara `targetStatusIfPersisted=PENDING_APPROVAL`; la persistencia real del workflow sigue pendiente.
-- `GET /api/v1/oee-validation/workflow/policy` publica el contrato semántico provisional `PENDING_APPROVAL -> APPROVED | REJECTED`.
+- `prevalidate` resuelve el valor OEE/KPI original desde `kpi.kpi_result`, devuelve `sourceRecordKey`, valida una sola oportunidad y declara estado objetivo `PENDING`. `POST /api/v1/oee-validation/validations` persiste la propuesta en `kpi.kpi_validation` + `kpi.kpi_validation_detail`.
+- `GET /api/v1/oee-validation/workflow/policy` publica los estados canónicos `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`; Aprobación KPI conserva la segunda etapa.
 - Ver `docs/spec-01-status.md` a `docs/spec-07-status.md` para el estado de cada especificación.
 
 ## Build
@@ -189,3 +191,4 @@ mvn clean verify
 ```
 
 Después, empaquetar el runtime requerido. Esto es especialmente importante cuando se integran patches incrementales: un `target/` anterior puede arrancar correctamente pero no contener los endpoints/clases más recientes.
+

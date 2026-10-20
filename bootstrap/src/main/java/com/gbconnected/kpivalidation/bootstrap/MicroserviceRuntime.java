@@ -4,6 +4,8 @@ import com.gbconnected.kpivalidation.adapter.memory.InMemoryOperationalContextAd
 import com.gbconnected.kpivalidation.adapter.memory.InMemoryStopTimeReferenceAdapter;
 import com.gbconnected.kpivalidation.adapter.memory.InMemoryMassPerformanceReferenceAdapter;
 import com.gbconnected.kpivalidation.adapter.memory.InMemoryOeeMetricSourceAdapter;
+import com.gbconnected.kpivalidation.adapter.memory.InMemoryActorIdentityAdapter;
+import com.gbconnected.kpivalidation.adapter.memory.InMemoryValidationPersistenceAdapter;
 import com.gbconnected.kpivalidation.adapter.postgres.*;
 import com.gbconnected.kpivalidation.application.*;
 import com.gbconnected.kpivalidation.application.port.out.*;
@@ -33,6 +35,9 @@ public final class MicroserviceRuntime implements AutoCloseable {
         MassPerformanceReferencePort massPerformance;
         OeeMetricSourcePort oeeMetrics;
         ActorIdentityPort actorIdentity;
+        ValidationPersistencePort validationPersistence;
+        FeatureActivationPort featureActivation;
+        ValidatorAssignmentAdministrationPort assignmentAdministration = ValidatorAssignmentAdministrationPort.unavailable();
         AutoCloseable close = () -> { };
         DataSource sqlDataSource = null;
         Map<String, String> stopProgrammingTypeByCode = parseStopProgrammingTypeMapping(
@@ -57,7 +62,9 @@ public final class MicroserviceRuntime implements AutoCloseable {
                         : new InMemoryStopTimeReferenceAdapter(stopProgrammingTypeByCode);
                 massPerformance = new InMemoryMassPerformanceReferenceAdapter();
                 oeeMetrics = new InMemoryOeeMetricSourceAdapter();
-                actorIdentity = ActorIdentityPort.unavailable();
+                actorIdentity = new InMemoryActorIdentityAdapter(tenant, user, Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")));
+                validationPersistence = new InMemoryValidationPersistenceAdapter();
+                featureActivation = FeatureActivationPort.enabledByDefault(env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
             }
             case "postgres-password" -> {
                 HikariDataSource ds = PooledDataSourceFactory.createPasswordDataSource(settings);
@@ -69,6 +76,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 massPerformance = new JdbcMassPerformanceReferenceAdapter(ds, massSourceMode, elaboratedMetricCode, deliveredMetricCode);
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
+                validationPersistence = new JdbcValidationPersistenceAdapter(ds);
+                featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 close = ds;
                 sqlDataSource = ds;
             }
@@ -82,6 +91,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 massPerformance = new JdbcMassPerformanceReferenceAdapter(ds, massSourceMode, elaboratedMetricCode, deliveredMetricCode);
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
+                validationPersistence = new JdbcValidationPersistenceAdapter(ds);
+                featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 close = ds;
                 sqlDataSource = ds;
             }
@@ -103,10 +114,13 @@ public final class MicroserviceRuntime implements AutoCloseable {
         String validatorRoleCode = env.getOrDefault("GBC_KPI_VALIDATOR_ROLE_CODE", "KPI_OEE_VALIDATOR");
         String validatorCapabilityCode = env.getOrDefault("GBC_KPI_VALIDATOR_CAPABILITY_CODE", "KPI_OEE_VALIDATION");
         ValidatorAssignmentPort assignments;
+        String assignmentAdminCapabilityCode = env.getOrDefault("GBC_KPI_VALIDATOR_ADMIN_CAPABILITY_CODE", "KPI_OEE_VALIDATOR_ASSIGNMENT_ADMIN");
         if ("memory".equalsIgnoreCase(settings.mode())) {
             assignments = new ConfiguredValidatorAssignmentAdapter(configuredAssignments);
         } else {
-            assignments = new JdbcValidatorAssignmentAdapter(Objects.requireNonNull(sqlDataSource), validatorRoleCode, validatorCapabilityCode);
+            DataSource assignmentDataSource = Objects.requireNonNull(sqlDataSource);
+            assignments = new JdbcValidatorAssignmentAdapter(assignmentDataSource, validatorRoleCode, validatorCapabilityCode);
+            assignmentAdministration = new JdbcValidatorAssignmentAdministrationAdapter(assignmentDataSource, validatorRoleCode, validatorCapabilityCode, assignmentAdminCapabilityCode);
         }
 
         CorrectionReasonPolicy correctionReasonPolicy = new CorrectionReasonPolicy(
@@ -123,6 +137,9 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 massPerformance,
                 oeeMetrics,
                 actorIdentity,
+                validationPersistence,
+                featureActivation,
+                assignmentAdministration,
                 correctionReasonPolicy,
                 new PreviousLocalCalendarDayPolicy(),
                 Clock.systemUTC(),
@@ -132,9 +149,12 @@ public final class MicroserviceRuntime implements AutoCloseable {
 
     public CheckEligibilityUseCase eligibility() { return validation; }
     public PrevalidateOeeCorrectionUseCase prevalidation() { return validation; }
+    public SubmitOeeValidationUseCase submission() { return validation; }
+    public GetOeeValidationUseCase validationDetail() { return validation; }
     public CapabilitiesUseCase capabilities() { return validation; }
     public GetMyValidatorAssignmentsUseCase validatorAssignments() { return validation; }
     public GetValidatorAssignmentPolicyUseCase validatorAssignmentPolicy() { return validation; }
+    public AdministerValidatorAssignmentsUseCase validatorAssignmentAdministration() { return validation; }
     public GetTemporalContextUseCase temporalContext() { return validation; }
     public GetOeeMetricReferenceUseCase oeeMetricReference() { return validation; }
     public GetStopTimeReferenceUseCase stopTimeReference() { return validation; }

@@ -18,9 +18,12 @@ public class OeeValidationController {
 
     private final CheckEligibilityUseCase eligibility;
     private final PrevalidateOeeCorrectionUseCase prevalidation;
+    private final SubmitOeeValidationUseCase submission;
+    private final GetOeeValidationUseCase validationDetail;
     private final CapabilitiesUseCase capabilities;
     private final GetMyValidatorAssignmentsUseCase validatorAssignments;
     private final GetValidatorAssignmentPolicyUseCase validatorAssignmentPolicy;
+    private final AdministerValidatorAssignmentsUseCase validatorAssignmentAdministration;
     private final GetTemporalContextUseCase temporalContext;
     private final GetOeeMetricReferenceUseCase oeeMetricReference;
     private final GetStopTimeReferenceUseCase stopTimeReference;
@@ -35,9 +38,12 @@ public class OeeValidationController {
 
     public OeeValidationController(CheckEligibilityUseCase eligibility,
             PrevalidateOeeCorrectionUseCase prevalidation,
+            SubmitOeeValidationUseCase submission,
+            GetOeeValidationUseCase validationDetail,
             CapabilitiesUseCase capabilities,
             GetMyValidatorAssignmentsUseCase validatorAssignments,
             GetValidatorAssignmentPolicyUseCase validatorAssignmentPolicy,
+            AdministerValidatorAssignmentsUseCase validatorAssignmentAdministration,
             GetTemporalContextUseCase temporalContext,
             GetOeeMetricReferenceUseCase oeeMetricReference,
             GetStopTimeReferenceUseCase stopTimeReference,
@@ -51,9 +57,12 @@ public class OeeValidationController {
             GetWorkflowPolicyUseCase workflowPolicy) {
         this.eligibility = eligibility;
         this.prevalidation = prevalidation;
+        this.submission = submission;
+        this.validationDetail = validationDetail;
         this.capabilities = capabilities;
         this.validatorAssignments = validatorAssignments;
         this.validatorAssignmentPolicy = validatorAssignmentPolicy;
+        this.validatorAssignmentAdministration = validatorAssignmentAdministration;
         this.temporalContext = temporalContext;
         this.oeeMetricReference = oeeMetricReference;
         this.stopTimeReference = stopTimeReference;
@@ -95,6 +104,51 @@ public class OeeValidationController {
     public ValidatorAssignmentPolicyView assignmentPolicy() {
         LOG.info("event=kpi_validator_assignment_policy correlationId={} result=OK", correlationId());
         return validatorAssignmentPolicy.getValidatorAssignmentPolicy();
+    }
+
+    @GetMapping("/assignments")
+    public List<ValidatorAssignmentAdminView> plantAssignments(@AuthenticationPrincipal Jwt jwt, @RequestParam long plantId) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        List<ValidatorAssignmentAdminView> result = validatorAssignmentAdministration.list(actor, plantId);
+        LOG.info("event=kpi_validator_assignment_admin_list actorTenant={} actorObject={} plantId={} correlationId={} resultCount={}",
+                actor.tenantId(), actor.objectId(), plantId, correlationId(), result.size());
+        return result;
+    }
+
+    @PostMapping("/assignments")
+    @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    public ValidatorAssignmentChangeResult assignValidator(@AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody ValidatorAssignmentHttpRequest request) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        ValidatorAssignmentChangeResult result = validatorAssignmentAdministration.assign(actor,
+                new AssignValidatorCommand(request.targetUserId(), request.plantId(), request.validTo(),
+                        request.externalApprovalReference(), request.reason()), correlationId());
+        LOG.info("event=kpi_validator_assignment_created actorTenant={} actorObject={} targetUserId={} plantId={} correlationId={} result=OK",
+                actor.tenantId(), actor.objectId(), request.targetUserId(), request.plantId(), correlationId());
+        return result;
+    }
+
+    @PatchMapping("/assignments/{targetUserId}/plants/{plantId}")
+    public ValidatorAssignmentChangeResult modifyValidator(@AuthenticationPrincipal Jwt jwt,
+            @PathVariable long targetUserId, @PathVariable long plantId,
+            @Valid @RequestBody ValidatorAssignmentModifyHttpRequest request) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        ValidatorAssignmentChangeResult result = validatorAssignmentAdministration.modify(actor, new ModifyValidatorAssignmentCommand(targetUserId, plantId,
+                request.validTo(), request.externalApprovalReference(), request.reason()), correlationId());
+        LOG.info("event=kpi_validator_assignment_modified actorTenant={} actorObject={} targetUserId={} plantId={} correlationId={} result=OK",
+                actor.tenantId(), actor.objectId(), targetUserId, plantId, correlationId());
+        return result;
+    }
+
+    @PostMapping("/assignments/{targetUserId}/plants/{plantId}/revoke")
+    public ValidatorAssignmentChangeResult revokeValidator(@AuthenticationPrincipal Jwt jwt,
+            @PathVariable long targetUserId, @PathVariable long plantId,
+            @Valid @RequestBody ValidatorAssignmentRevokeHttpRequest request) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        ValidatorAssignmentChangeResult result = validatorAssignmentAdministration.revoke(actor, new RevokeValidatorAssignmentCommand(targetUserId, plantId, request.reason()), correlationId());
+        LOG.info("event=kpi_validator_assignment_revoked actorTenant={} actorObject={} targetUserId={} plantId={} correlationId={} result=OK",
+                actor.tenantId(), actor.objectId(), targetUserId, plantId, correlationId());
+        return result;
     }
 
     @GetMapping("/assignments/me")
@@ -225,6 +279,32 @@ public class OeeValidationController {
         LOG.info("event=kpi_validation_prevalidate actorTenant={} actorObject={} plantId={} lineId={} businessDate={} metricCode={} reasonType={} correlationId={} rulesValid={} readyForSubmission={}",
                 actor.tenantId(), actor.objectId(), request.plantId(), request.lineId(), request.businessDate(),
                 request.metricCode(), request.reasonType(), correlationId(), result.businessRulesValid(), result.readyForSubmission());
+        return result;
+    }
+
+
+    @PostMapping("/validations")
+    @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    public OeeValidationResult submit(@AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody PrevalidationHttpRequest request) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        OeeValidationResult result = submission.submit(actor,
+                new PrevalidateOeeCorrectionCommand(
+                        request.plantId(), request.lineId(), request.businessDate(), request.metricCode(),
+                        request.proposedValue(), request.reasonType(), request.incidentNumber(),
+                        request.operationalCause(), request.actionPlan()), correlationId());
+        LOG.info("event=kpi_validation_created actorTenant={} actorObject={} validationId={} plantId={} lineId={} businessDate={} metricCode={} status={} correlationId={} result=OK",
+                actor.tenantId(), actor.objectId(), result.validationId(), result.plantId(), result.lineId(),
+                result.businessDate(), result.metricCode(), result.status(), correlationId());
+        return result;
+    }
+
+    @GetMapping("/validations/{validationId}")
+    public OeeValidationResult validationDetail(@AuthenticationPrincipal Jwt jwt, @PathVariable long validationId) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        OeeValidationResult result = validationDetail.get(actor, validationId);
+        LOG.info("event=kpi_validation_detail actorTenant={} actorObject={} validationId={} plantId={} lineId={} status={} correlationId={} result=OK",
+                actor.tenantId(), actor.objectId(), validationId, result.plantId(), result.lineId(), result.status(), correlationId());
         return result;
     }
 

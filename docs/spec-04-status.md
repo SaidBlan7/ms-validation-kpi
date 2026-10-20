@@ -15,7 +15,7 @@
 - Como v1.2 no modela aplicabilidad línea-clasificación, se usa explícitamente como fallback el catálogo activo global/organización de la planta; una clasificación activa no observada aparece con `0` y puede prevalidarse. Una clasificación inactiva no observada no se ofrece.
 - Clasificaciones observadas en D-1 permanecen visibles/prevalidatables aunque actualmente estén inactivas; se informa warning.
 - Se rechazan tiempos faltantes/negativos; cero es válido.
-- Se conserva valor original/propuesto, justificación Specs 06, evidencia Specs 07 y `targetStatusIfPersisted=PENDING_APPROVAL`.
+- Se conserva valor original/propuesto, justificación Specs 06, evidencia Specs 07 y `targetStatusIfPersisted=PENDING`.
 - App Service, Azure Functions, OpenAPI y monitoreo/correlation ID actualizados.
 - Sin INSERT/UPDATE/DELETE ni DDL.
 
@@ -25,5 +25,5 @@
 - No existe relación línea-clasificación. La implementación usa provisionalmente el catálogo activo global/organización de la planta como aplicabilidad; si negocio requiere catálogos distintos por línea, Data/arquitectura debe modelar esa relación o entregar un API/configuración autoritativa.
 - La regla matemática exacta de suma/máximo entre clasificaciones está abierta en la Spec 04; no se hereda una regla de 24 horas de otro módulo.
 - La Spec no define si varias clasificaciones corregidas pertenecen a una sola validación persistida o a registros separados; la prevalidación actual opera una clasificación por request.
-- Persistencia de propuesta, unicidad de una sola modificación, concurrencia, `PENDING_APPROVAL` durable, Approval KPI y aplicación definitiva siguen dependiendo de la entidad/API de Validación KPI faltante de Spec 01.
+- La persistencia canónica de Spec 01 ya existe para correcciones basadas en `kpi_result`; falta definir cómo una corrección agregada de tiempos/clasificaciones de Spec 04 se representa en `kpi_validation_detail` o en otra estructura antes de habilitar `PENDING` durable para este flujo. Approval KPI y aplicación definitiva siguen siendo dependencias separadas.
 - El contrato exacto que demuestra que este agregado de `stops` es idéntico al insumo final del cálculo de efectividad/OEE sigue siendo externo al DDL; por eso se conserva trazabilidad de fuente y no se modifica `kpi_result`.

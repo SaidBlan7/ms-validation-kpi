@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.10.0
-  description: Specs 01-07 service aligned with the physical v1.2 baseline where applicable. Specs 06-07 now expose configurable justification limits/incident format and canonical app_security user identity snapshots in prevalidation evidence. No KPI validation workflow or assignment administration writes are performed by this micro.
+  version: 0.12.0
+  description: Specs 01-07 service aligned with the current canonical database. Spec 01 persists OEE validation proposals as PENDING and Spec 02 administers plant-specific KPI validator assignments canonically; Approval KPI remains a separate dependency.
 paths:
   /api/v1/oee-validation/capabilities:
     get:
@@ -20,21 +20,21 @@ paths:
   /api/v1/oee-validation/audit/policy:
     get:
       summary: Returns the current Spec 07 validator/timestamp evidence policy
-      description: Uses Entra tid+oid as immutable actor identity and, in canonical DB modes, also resolves app_security.user_identity.user_id plus display_name/corporate_email/is_active snapshots. Time is an absolute UTC instant. Presentation timezone, persistence, retention and Approval/Reporting reconciliation remain pending.
+      description: Uses Entra tid+oid as immutable actor identity and resolves app_security.user_identity.user_id in canonical DB modes. Spec 01 persists proposed_by_user_id/proposed_at and Spec 02 assignment writes feed audit.change_log through canonical triggers. Presentation timezone, retention and Approval/Reporting reconciliation remain pending.
       responses:
         '200': { description: Audit evidence policy }
         '401': { description: Authentication required }
   /api/v1/oee-validation/workflow/policy:
     get:
       summary: Returns the semantic Spec 01 validation workflow contract
-      description: Declares provisional internal states PENDING_APPROVAL, APPROVED and REJECTED, source identity KPI_RESULT_ID, and explicitly marks persistence/concurrency/approval application as pending external storage or module contracts.
+      description: Declares canonical states PENDING, APPROVED, REJECTED and EXPIRED. New Spec 01 proposals persist as PENDING using KPI_RESULT_ID as source identity. Approval/rejection/application remain owned by the Approval KPI module.
       responses:
         '200': { description: Workflow contract policy }
         '401': { description: Authentication required }
   /api/v1/oee-validation/assignments/policy:
     get:
       summary: Returns the Spec 02 KPI OEE validator assignment policy
-      description: Declares semantic role/capability codes, plant-specific scope, max two effective validators, external approval/administration ownership, optional valid_to expiry, multi-plant support, revocation semantics and remaining concurrency/audit limitations. It does not create or revoke assignments.
+      description: Declares validator role/capability plus the administration capability, plant-specific scope, max two effective validators, external approval evidence, optional valid_to expiry, multi-plant support, transactional concurrency control and revocation semantics.
       responses:
         '200': { description: Validator assignment policy }
         '401': { description: Authentication required }
@@ -46,6 +46,79 @@ paths:
         '200': { description: Effective KPI assignments }
         '401': { description: Authentication required }
         '403': { description: Actor does not have the dedicated KPI validator entitlement }
+  /api/v1/oee-validation/assignments:
+    get:
+      summary: Lists canonical KPI validator assignment history for one plant
+      description: Requires the configured assignment-administration capability in global scope or the requested plant scope.
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: Assignment history }
+        '401': { description: Authentication required }
+        '403': { description: Assignment administrator capability required }
+    post:
+      summary: Assigns a plant to an approved KPI OEE superuser
+      description: Requires an externalApprovalReference because Direction Global approval remains outside GBC. The target user must be active and have current generic plant access. The transaction serializes by plant and rejects a third effective validator.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, plantId, externalApprovalReference]
+              properties:
+                targetUserId: { type: integer, format: int64 }
+                plantId: { type: integer, format: int64 }
+                validTo: { type: string, format: date-time, nullable: true }
+                externalApprovalReference: { type: string }
+                reason: { type: string }
+      responses:
+        '201': { description: Assignment created }
+        '400': { description: Invalid request/reference data }
+        '401': { description: Authentication required }
+        '403': { description: Assignment administrator capability required }
+        '409': { description: Duplicate assignment, missing generic plant access, or plant already has two validators }
+  /api/v1/oee-validation/assignments/{targetUserId}/plants/{plantId}:
+    patch:
+      summary: Modifies validity/evidence for an effective KPI OEE plant assignment
+      parameters:
+        - { in: path, name: targetUserId, required: true, schema: { type: integer, format: int64 } }
+        - { in: path, name: plantId, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [externalApprovalReference]
+              properties:
+                validTo: { type: string, format: date-time, nullable: true }
+                externalApprovalReference: { type: string }
+                reason: { type: string }
+      responses:
+        '200': { description: Assignment modified }
+        '403': { description: Assignment administrator capability required }
+        '409': { description: Effective assignment not found or canonical data conflict }
+  /api/v1/oee-validation/assignments/{targetUserId}/plants/{plantId}/revoke:
+    post:
+      summary: Revokes an effective KPI OEE plant assignment
+      description: Closes user_role_assignment.valid_to at the current instant. Existing PENDING KPI validations are intentionally left unchanged because Spec 02 leaves that behavior undefined.
+      parameters:
+        - { in: path, name: targetUserId, required: true, schema: { type: integer, format: int64 } }
+        - { in: path, name: plantId, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Assignment revoked }
+        '403': { description: Assignment administrator capability required }
+        '409': { description: Effective assignment not found }
   /api/v1/oee-validation/temporal-context:
     get:
       summary: Returns the server-authoritative temporal context for KPI OEE validation
@@ -86,7 +159,7 @@ paths:
   /api/v1/oee-validation/prevalidate:
     post:
       summary: Validates available OEE correction rules including Spec 06 justification and Spec 07 audit evidence without persisting a proposal
-      description: Revalidates D-1 and Spec 06 justification on every request, then resolves originalValue again from canonical kpi.kpi_result. The response includes sourceRecordKey (kpi_result identity), normalized justification, Spec 07 auditEvidence, and targetStatusIfPersisted=PENDING_APPROVAL. Submission remains disabled until KPI validation persistence/approval exists.
+      description: Revalidates D-1 and justification on every request, resolves originalValue again from canonical kpi.kpi_result, checks that proposedValue differs, and checks whether the kpi_result already has a validation. A valid response is ready for submission with target status PENDING.
       requestBody:
         required: true
         content:
@@ -109,6 +182,44 @@ paths:
         '400': { description: Invalid request }
         '401': { description: Authentication required }
         '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/validations:
+    post:
+      summary: Creates the Spec 01 OEE validation proposal
+      description: Revalidates all Spec 01 rules server-side and atomically persists kpi.kpi_validation plus kpi.kpi_validation_detail as PENDING. Concurrent submissions for the same kpi_result_id are serialized with a PostgreSQL advisory transaction lock.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plantId, lineId, businessDate, metricCode, proposedValue, reasonType]
+              properties:
+                plantId: { type: integer, format: int64 }
+                lineId: { type: integer, format: int64 }
+                businessDate: { type: string, format: date }
+                metricCode: { type: string }
+                proposedValue: { type: number }
+                reasonType: { type: string, enum: [OPERATIVE, SYSTEM] }
+                incidentNumber: { type: string }
+                operationalCause: { type: string }
+                actionPlan: { type: string }
+      responses:
+        '200': { description: Validation proposal persisted as PENDING }
+        '400': { description: Invalid request }
+        '401': { description: Authentication required }
+        '403': { description: Scope/entitlement denied }
+        '409': { description: The KPI result already has a validation proposal }
+        '422': { description: Spec 01 business rules are not satisfied }
+  /api/v1/oee-validation/validations/{validationId}:
+    get:
+      summary: Returns Spec 01 validation traceability detail
+      parameters:
+        - { in: path, name: validationId, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: Validation detail including original/proposed values, reason, actor and timestamps }
+        '401': { description: Authentication required }
+        '403': { description: Scope/entitlement denied }
+        '404': { description: Validation not found }
   /api/v1/oee-validation/stop-times/policy:
     get:
       summary: Returns the current Spec 04 stop-time validation policy
@@ -132,7 +243,7 @@ paths:
   /api/v1/oee-validation/stop-times/prevalidate:
     post:
       summary: Prevalidates one Spec 04 stop-time correction plus Specs 06-07 evidence without persisting it
-      description: Revalidates D-1/security/classification scope, reloads the canonical line/date/classification aggregate, blocks stale or manipulated originalSeconds, validates non-negative seconds and justification, and returns classification/programming metadata, observedOriginalSeconds, sourceAggregateKey, auditEvidence and targetStatusIfPersisted=PENDING_APPROVAL. Total-time mathematics, multi-classification persisted grouping and Approval KPI remain pending external definition/storage.
+      description: Revalidates D-1/security/classification scope, reloads the canonical line/date/classification aggregate, blocks stale or manipulated originalSeconds, validates non-negative seconds and justification, and returns classification/programming metadata, observedOriginalSeconds, sourceAggregateKey, auditEvidence and targetStatusIfPersisted=PENDING. Total-time mathematics, multi-classification persisted grouping and Approval KPI remain pending external definition/storage.
       requestBody:
         required: true
         content:
@@ -179,7 +290,7 @@ paths:
   /api/v1/oee-validation/masses/prevalidate:
     post:
       summary: Prevalidates one Spec 05 mass correction plus Specs 06-07 evidence without persisting it
-      description: Validates D-1/security scope, canonical MASS UOM, variable, decimal non-negative values and reason details. The backend reloads the current line/date/variable/UOM reference and blocks a stale or manipulated originalValue. A missing source row is not treated as zero because Spec 05 is a correction flow, not KPI Manual capture. Responses include sourceAggregateKey, sourceType, normalized justification, auditEvidence and targetStatusIfPersisted=PENDING_APPROVAL. Relation rules, final rounding, post-persistence late-data precedence, persistence and approval remain pending.
+      description: Validates D-1/security scope, canonical MASS UOM, variable, decimal non-negative values and reason details. The backend reloads the current line/date/variable/UOM reference and blocks a stale or manipulated originalValue. A missing source row is not treated as zero because Spec 05 is a correction flow, not KPI Manual capture. Responses include sourceAggregateKey, sourceType, normalized justification, auditEvidence and targetStatusIfPersisted=PENDING. Relation rules, final rounding, post-persistence late-data precedence, persistence and approval remain pending.
       requestBody:
         required: true
         content:

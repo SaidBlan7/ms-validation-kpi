@@ -1,6 +1,10 @@
 package com.gbconnected.kpivalidation.appservice.web;
 
 import com.gbconnected.kpivalidation.application.AuthorizationException;
+import com.gbconnected.kpivalidation.application.ValidationAlreadyExistsException;
+import com.gbconnected.kpivalidation.application.ValidationNotFoundException;
+import com.gbconnected.kpivalidation.application.ValidatorAssignmentConflictException;
+import com.gbconnected.kpivalidation.domain.DomainValidationException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +27,24 @@ public class ApiExceptionHandler {
     ResponseEntity<Map<String,String>> forbidden(AuthorizationException e) {
         LOG.warn("event=kpi_validation_request_rejected correlationId={} status=403 reason={}", correlationId(), safe(e.getMessage()));
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", safe(e.getMessage())));
+    }
+
+
+    @ExceptionHandler({ValidationAlreadyExistsException.class, ValidatorAssignmentConflictException.class})
+    ResponseEntity<Map<String,String>> conflict(RuntimeException e) {
+        LOG.warn("event=kpi_validation_request_rejected correlationId={} status=409 reason={}", correlationId(), safe(e.getMessage()));
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", safe(e.getMessage())));
+    }
+
+    @ExceptionHandler(ValidationNotFoundException.class)
+    ResponseEntity<Map<String,String>> notFound(ValidationNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", safe(e.getMessage())));
+    }
+
+    @ExceptionHandler(DomainValidationException.class)
+    ResponseEntity<Map<String,String>> domain(DomainValidationException e) {
+        LOG.warn("event=kpi_validation_request_rejected correlationId={} status=422 reason={}", correlationId(), safe(e.getMessage()));
+        return ResponseEntity.unprocessableEntity().body(Map.of("error", safe(e.getMessage())));
     }
 
     @ExceptionHandler({IllegalArgumentException.class, MethodArgumentNotValidException.class})
