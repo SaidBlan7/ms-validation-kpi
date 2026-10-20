@@ -161,6 +161,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
     public GetMassPerformanceReferenceUseCase massPerformanceReference() { return validation; }
     public GetMassPerformancePolicyUseCase massPerformancePolicy() { return validation; }
     public PrevalidateMassPerformanceCorrectionUseCase massPerformancePrevalidation() { return validation; }
+    public SubmitMassPerformanceValidationUseCase massPerformanceSubmission() { return validation; }
+    public GetMassPerformanceValidationUseCase massPerformanceValidationDetail() { return validation; }
     public GetJustificationPolicyUseCase justificationPolicy() { return validation; }
     public GetAuditPolicyUseCase auditPolicy() { return validation; }
     public GetWorkflowPolicyUseCase workflowPolicy() { return validation; }

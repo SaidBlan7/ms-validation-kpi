@@ -1,3 +1,10 @@
+
+## Spec 05 - durable mass validation
+
+- Added durable PENDING submission/detail flows for elaborated/delivered mass corrections.
+- Added `kpi.kpi_validation_mass_detail` extension with unique line/date/variable/UOM validation identity and source lineage.
+- Submission re-runs D-1/security/UOM/source/original/justification rules and prevents a second validation opportunity.
+- App Service, Functions and OpenAPI expose mass validation create/detail endpoints.
 # Spec 05 v1.2 — migración canónica y hardening
 
 - eliminado uso legacy de `scheduling.intermediate_material_movement`, `core.item` e `itemId`.

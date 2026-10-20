@@ -15,6 +15,10 @@ public interface ValidationPersistencePort {
     Optional<StopTimeValidationResult> findStopTimeById(long validationId);
     boolean existsForStopTime(long lineId, LocalDate businessDate, long stopClassificationId);
 
+    MassPerformanceValidationResult createMassPerformance(MassPerformanceValidationPersistenceRequest request);
+    Optional<MassPerformanceValidationResult> findMassPerformanceById(long validationId);
+    boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, com.gbconnected.kpivalidation.domain.MassPerformanceVariable variable);
+
     static ValidationPersistencePort unavailable() {
         return new ValidationPersistencePort() {
             @Override public boolean available() { return false; }
@@ -24,6 +28,9 @@ public interface ValidationPersistencePort {
             @Override public StopTimeValidationResult createStopTime(StopTimeValidationPersistenceRequest request) { throw new IllegalStateException("Validation persistence unavailable"); }
             @Override public Optional<StopTimeValidationResult> findStopTimeById(long validationId) { return Optional.empty(); }
             @Override public boolean existsForStopTime(long lineId, LocalDate businessDate, long stopClassificationId) { return false; }
+            @Override public MassPerformanceValidationResult createMassPerformance(MassPerformanceValidationPersistenceRequest request) { throw new IllegalStateException("Validation persistence unavailable"); }
+            @Override public Optional<MassPerformanceValidationResult> findMassPerformanceById(long validationId) { return Optional.empty(); }
+            @Override public boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, com.gbconnected.kpivalidation.domain.MassPerformanceVariable variable) { return false; }
         };
     }
 }

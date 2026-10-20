@@ -25,3 +25,6 @@
 - El comportamiento de validaciones `PENDING` existentes al revocar un superusuario sigue sin definición funcional. Esta implementación **no las cancela ni las modifica**; únicamente revoca acceso futuro.
 - El código oficial de la capability administrativa debe ser sembrado/confirmado por Seguridad/Data; el default es semántico y configurable.
 - La base no impone unicidad física de una asignación vigente por `(user_id, role_id, plant_id)`. Este micro evita duplicados con lock + recheck, pero un escritor externo podría romper la regla.
+## Alineación posterior
+
+- Spec 05 mass endpoints reuse the same plant-specific validator assignment and revocation checks defined by Spec 02.

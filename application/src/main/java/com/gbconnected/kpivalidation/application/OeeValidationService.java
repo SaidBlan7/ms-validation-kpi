@@ -12,7 +12,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         GetMassPerformanceReferenceUseCase, PrevalidateMassPerformanceCorrectionUseCase,
         GetJustificationPolicyUseCase, GetAuditPolicyUseCase, GetWorkflowPolicyUseCase, GetOeeMetricReferenceUseCase,
         GetValidatorAssignmentPolicyUseCase, GetStopTimePolicyUseCase, GetMassPerformancePolicyUseCase,
-        SubmitOeeValidationUseCase, GetOeeValidationUseCase, SubmitStopTimeValidationUseCase, GetStopTimeValidationUseCase, AdministerValidatorAssignmentsUseCase {
+        SubmitOeeValidationUseCase, GetOeeValidationUseCase, SubmitStopTimeValidationUseCase, GetStopTimeValidationUseCase,
+        SubmitMassPerformanceValidationUseCase, GetMassPerformanceValidationUseCase, AdministerValidatorAssignmentsUseCase {
 
     private static final String DATE_POLICY_WARNING_CODE = "OEE_TEMPORAL_AUTHORITY_PROVISIONAL";
 
@@ -678,7 +679,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "PENDING_FUNCTIONAL_DEFINITION",
                 "RECHECK_BEFORE_SUBMISSION; POST_PERSISTENCE_PRECEDENCE_PENDING_DEFINITION",
                 ValidationWorkflowStatus.PENDING.name(),
-                validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION_DETAIL_STOP_CLASSIFICATION" : "UNAVAILABLE");
+                validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION_MASS_DETAIL" : "UNAVAILABLE");
     }
 
     @Override
@@ -710,6 +711,11 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
             issues.add(ValidationIssue.blocker("PROPOSED_MASS_VALUE_REQUIRED", "proposedValue is required"));
         } else if (command.proposedValue().signum() < 0) {
             issues.add(ValidationIssue.blocker("PROPOSED_MASS_VALUE_NEGATIVE", "proposedValue cannot be negative"));
+        }
+        if (command.originalValue() != null && command.proposedValue() != null
+                && command.originalValue().compareTo(command.proposedValue()) == 0) {
+            issues.add(ValidationIssue.blocker("PROPOSED_MASS_VALUE_MUST_DIFFER",
+                    "proposedValue must differ from originalValue"));
         }
         CorrectionJustificationView justification = validateAndNormalizeJustification(
                 command.reasonType(), command.incidentNumber(), command.operationalCause(), command.actionPlan(), issues);
@@ -753,16 +759,69 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "Fractional canonical values are accepted without additional application rounding; final precision and rounding remain undefined in Spec 05"));
         issues.add(ValidationIssue.warning("LATE_AUTOMATIC_DATA_POST_PERSISTENCE_PRECEDENCE_PENDING",
                 "The server rechecks the source before submission, but Spec 05 does not define what wins if automatic data changes after a validation proposal has already been persisted"));
-        issues.add(ValidationIssue.warning("VALIDATION_PERSISTENCE_NOT_CONNECTED",
-                "The correction is not saved and cannot enter durable PENDING until the KPI validation persistence contract is available"));
+        if (!validationPersistence.available()) {
+            issues.add(ValidationIssue.warning("VALIDATION_PERSISTENCE_UNAVAILABLE",
+                    "Prevalidation is available, but this runtime cannot persist mass-performance proposals"));
+        } else if (command.variable() != null && command.uomId() > 0
+                && validationPersistence.existsForMassPerformance(command.lineId(), command.businessDate(), command.uomId(), command.variable())) {
+            issues.add(ValidationIssue.blocker("MASS_VALUE_ALREADY_VALIDATED",
+                    "This line/date/variable/UOM already has a validation proposal and cannot be edited again"));
+        }
 
         boolean valid = issues.stream().noneMatch(i -> i.severity() == Severity.BLOCKER);
-        return new MassPerformanceCorrectionPrevalidationResult(valid, false, command.plantId(), command.lineId(),
+        return new MassPerformanceCorrectionPrevalidationResult(valid, valid && validationPersistence.available(), command.plantId(), command.lineId(),
                 command.businessDate(), command.uomId(), command.variable(),
                 command.originalValue(), command.proposedValue(), observedReferenceValue,
                 originalMatchesOperationalReference, sourceAggregateKey, sourceType, justification,
                 auditEvidence(actor), massPerformanceReference.source(), ValidationWorkflowStatus.PENDING.name(),
-                validationPersistence.available() ? "CANONICAL_KPI_VALIDATION_READY" : "UNAVAILABLE", List.copyOf(issues));
+                validationPersistence.available() ? "CANONICAL_KPI_VALIDATION_MASS_DETAIL_READY" : "UNAVAILABLE", List.copyOf(issues));
+    }
+
+    @Override
+    public MassPerformanceValidationResult submitMassPerformance(ActorContext actor,
+            PrevalidateMassPerformanceCorrectionCommand command, String correlationId) {
+        MassPerformanceCorrectionPrevalidationResult pre = prevalidateMassPerformance(actor, command);
+        if (!pre.businessRulesValid() || !pre.readyForSubmission()) {
+            throw new DomainValidationException("Mass-performance validation proposal does not satisfy Spec 05 business rules");
+        }
+        ValidationAuditEvidenceView evidence = auditEvidence(actor);
+        if (evidence.canonicalUserId() == null || !Boolean.TRUE.equals(evidence.accountActiveSnapshot())) {
+            throw new AuthorizationException("Canonical active app_security.user_identity is required to persist a validation");
+        }
+        if (pre.sourceAggregateKey() == null || pre.sourceAggregateKey().isBlank() || pre.sourceType() == null || pre.sourceType().isBlank()) {
+            throw new IllegalStateException("Canonical mass source lineage is required to persist Spec 05");
+        }
+        PlantContext plant = context.findPlant(command.plantId()).orElseThrow(() -> new IllegalStateException("Plant not found"));
+        ZoneId zone = ZoneId.of(plant.timezoneName());
+        Instant now = clock.instant();
+        Instant expiresAt = ZonedDateTime.now(clock.withZone(zone)).toLocalDate().plusDays(1)
+                .atStartOfDay(zone).minusSeconds(1).toInstant();
+        if (expiresAt.isBefore(now)) expiresAt = now;
+        CorrectionJustificationView j = pre.justification();
+        return validationPersistence.createMassPerformance(new MassPerformanceValidationPersistenceRequest(
+                command.plantId(), command.lineId(), command.businessDate(), command.uomId(), command.variable(),
+                command.originalValue(), command.proposedValue(), pre.sourceAggregateKey(), pre.sourceType(),
+                command.reasonType(), null, j == null ? null : j.operationalCause(), j == null ? null : j.actionPlan(),
+                j == null ? null : j.incidentNumber(), evidence.canonicalUserId(), now, expiresAt, correlationId));
+    }
+
+    @Override
+    public MassPerformanceValidationResult getMassPerformanceValidation(ActorContext actor, long validationId) {
+        if (validationId <= 0) throw new IllegalArgumentException("validationId must be positive");
+        MassPerformanceValidationResult result = validationPersistence.findMassPerformanceById(validationId)
+                .orElseThrow(() -> new ValidationNotFoundException("Mass-performance validation not found"));
+        List<ValidationIssue> issues = new ArrayList<>();
+        validateModuleEntitlement(actor, issues);
+        validateSpecificKpiAssignment(actor, result.plantId(), issues);
+        validateFeatureActivation(result.plantId(), issues);
+        if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
+            throw new AuthorizationException("Actor is not authorized to read this mass-performance validation");
+        }
+        return new MassPerformanceValidationResult(result.validationId(), result.status(), result.plantId(), result.lineId(),
+                result.businessDate(), result.uomId(), result.variable(), result.originalValue(), result.proposedValue(),
+                result.sourceAggregateKey(), result.sourceType(), result.reasonType(), result.justification(),
+                result.operationalCause(), result.actionPlan(), result.incidentReference(), result.proposedByUserId(),
+                result.proposedAt(), result.expiresAt(), result.approvedByUserId(), result.approvedAt(), List.copyOf(issues));
     }
 
 
@@ -1082,6 +1141,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Spec 05 accepts canonical decimal zero/positive values, rejects negatives, and requires a canonical UOM with dimension_code=MASS"),
                 new CapabilityView("massPerformanceVariableEnablement", "IMPLEMENTED_SEMANTIC_CODES",
                         "ELABORATED_MASS and DELIVERED_MASS are explicit variables; derived metric codes are configurable through GBC_ELABORATED_MASS_METRIC_CODE and GBC_DELIVERED_MASS_METRIC_CODE"),
+                new CapabilityView("massPerformancePersistence", "IMPLEMENTED", "Durable PENDING proposals use kpi_validation + kpi_validation_detail + kpi_validation_mass_detail with one-opportunity key"),
                 new CapabilityView("massPerformanceMissingOriginal", "IMPLEMENTED_CONSERVATIVE",
                         "A missing canonical source row is not converted to zero because Spec 05 is a correction flow rather than KPI Manual capture-from-zero"),
                 new CapabilityView("massPerformanceRelationRule", "PENDING_DEFINITION",

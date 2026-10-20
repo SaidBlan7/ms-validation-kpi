@@ -29,3 +29,6 @@
 - `kpi.kpi_validation_detail.kpi_result_id` no tiene UNIQUE. El micro serializa concurrentes con advisory lock, pero se recomienda una restricción/índice UNIQUE físico si la regla “una sola validación por dato” debe quedar garantizada contra cualquier escritor externo.
 - La base comenta que `expires_at` es 23:59:59 del `oee_date`, pero Spec 01 sólo permite proponer D-1; esa combinación dejaría `expires_at < proposed_at` y chocaría con `ck_kpi_validation_expiration`. Esta adaptación usa el fin del día local actual como deadline provisional hasta que se corrija/aclare esa semántica.
 - El máximo de dos superusuarios se valida al usar el módulo y Spec 02 ahora también lo previene en el write path de este micro con lock transaccional por planta. La base por sí sola todavía no impone esa cardinalidad contra escritores externos.
+## Alineación posterior
+
+- Spec 05 now persists mass corrections through the same PENDING approval workflow without applying the proposed value immediately.

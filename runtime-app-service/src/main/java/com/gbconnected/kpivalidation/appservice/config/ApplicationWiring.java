@@ -28,6 +28,8 @@ public class ApplicationWiring {
     @Bean GetMassPerformanceReferenceUseCase massPerformanceReference(MicroserviceRuntime runtime) { return runtime.massPerformanceReference(); }
     @Bean GetMassPerformancePolicyUseCase massPerformancePolicy(MicroserviceRuntime runtime) { return runtime.massPerformancePolicy(); }
     @Bean PrevalidateMassPerformanceCorrectionUseCase massPerformancePrevalidation(MicroserviceRuntime runtime) { return runtime.massPerformancePrevalidation(); }
+    @Bean SubmitMassPerformanceValidationUseCase massPerformanceSubmission(MicroserviceRuntime runtime) { return runtime.massPerformanceSubmission(); }
+    @Bean GetMassPerformanceValidationUseCase massPerformanceValidationDetail(MicroserviceRuntime runtime) { return runtime.massPerformanceValidationDetail(); }
     @Bean GetJustificationPolicyUseCase justificationPolicy(MicroserviceRuntime runtime) { return runtime.justificationPolicy(); }
     @Bean GetAuditPolicyUseCase auditPolicy(MicroserviceRuntime runtime) { return runtime.auditPolicy(); }
     @Bean GetWorkflowPolicyUseCase workflowPolicy(MicroserviceRuntime runtime) { return runtime.workflowPolicy(); }

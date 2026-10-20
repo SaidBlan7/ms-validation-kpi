@@ -328,8 +328,8 @@ paths:
         '403': { description: Actor is not authorized for the requested KPI plant scope }
   /api/v1/oee-validation/masses/prevalidate:
     post:
-      summary: Prevalidates one Spec 05 mass correction plus Specs 06-07 evidence without persisting it
-      description: Validates D-1/security scope, canonical MASS UOM, variable, decimal non-negative values and reason details. The backend reloads the current line/date/variable/UOM reference and blocks a stale or manipulated originalValue. A missing source row is not treated as zero because Spec 05 is a correction flow, not KPI Manual capture. Responses include sourceAggregateKey, sourceType, normalized justification, auditEvidence and targetStatusIfPersisted=PENDING. Relation rules, final rounding, post-persistence late-data precedence, persistence and approval remain pending.
+      summary: Prevalidates one Spec 05 mass correction plus Specs 06-07 evidence before persistence
+      description: Validates D-1/security scope, canonical MASS UOM, variable, decimal non-negative values and reason details. The backend reloads the current line/date/variable/UOM reference and blocks a stale or manipulated originalValue. A missing source row is not treated as zero because Spec 05 is a correction flow, not KPI Manual capture. Responses include sourceAggregateKey, sourceType, normalized justification, auditEvidence and targetStatusIfPersisted=PENDING. Relation rules, final rounding and post-persistence late-data precedence remain pending; durable PENDING persistence is available when the Spec 05 schema extension is installed.
       requestBody:
         required: true
         content:
@@ -354,6 +354,44 @@ paths:
         '400': { description: Invalid request }
         '401': { description: Authentication required }
         '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/masses/validations:
+    post:
+      summary: Persists a Spec 05 mass correction as a durable PENDING validation
+      description: Re-runs all server-side prevalidation, preserves original/proposed values and UOM in kpi_validation_detail, and stores variable/source lineage in kpi_validation_mass_detail. A unique validation_key enforces one validation opportunity per line/date/variable/UOM.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plantId, lineId, businessDate, uomId, variable, originalValue, proposedValue, reasonType]
+              properties:
+                plantId: { type: integer, format: int64 }
+                lineId: { type: integer, format: int64 }
+                businessDate: { type: string, format: date }
+                uomId: { type: integer, format: int64 }
+                variable: { type: string, enum: [ELABORATED_MASS, DELIVERED_MASS] }
+                originalValue: { type: number, minimum: 0 }
+                proposedValue: { type: number, minimum: 0 }
+                reasonType: { type: string, enum: [OPERATIVE, SYSTEM] }
+                incidentNumber: { type: string }
+                operationalCause: { type: string }
+                actionPlan: { type: string }
+      responses:
+        '201': { description: Durable PENDING mass-performance validation }
+        '400': { description: Invalid/stale/already validated request }
+        '401': { description: Authentication required }
+        '403': { description: Actor is not authorized for the requested KPI plant scope }
+  /api/v1/oee-validation/masses/validations/{validationId}:
+    get:
+      summary: Returns Spec 05 mass-validation traceability
+      parameters:
+        - { in: path, name: validationId, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: Mass validation detail with variable, source lineage, original/proposed value, actor, reason and timestamps }
+        '401': { description: Authentication required }
+        '403': { description: Scope/entitlement denied }
+        '404': { description: Mass validation not found }
   /api/v1/health:
     get:
       summary: DB connectivity health

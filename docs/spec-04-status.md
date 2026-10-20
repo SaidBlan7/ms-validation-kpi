@@ -24,3 +24,6 @@
 - `oee_stop_type_code` permanece extensible en BD; Spec 04 sólo reconoce funcionalmente PROGRAMMED y UNPROGRAMMED para este flujo. Valores distintos se exponen como dato canónico pero requieren decisión funcional.
 - Approval KPI sigue siendo responsable de aprobar/rechazar y de aplicar el valor efectivo al cálculo OEE.
 - La base no impone un UNIQUE físico para `(line_id, oee_date, stop_classification_id)` a través de cabecera/detalle. El micro lo protege transaccionalmente, pero un escritor externo podría saltarse esa regla.
+## Alineación posterior
+
+- Specs 04 and 05 now both persist typed validation details under kpi_validation while keeping their domain-specific identity/lineage separate.

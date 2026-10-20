@@ -14,6 +14,8 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     private final ConcurrentHashMap<Long, Long> byKpiResult = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> byStopTime = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, StopTimeValidationResult> stopById = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> byMass = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, MassPerformanceValidationResult> massById = new ConcurrentHashMap<>();
 
     @Override public boolean available() { return true; }
     @Override public boolean existsForKpiResult(long kpiResultId) { return byKpiResult.containsKey(kpiResultId); }
@@ -58,6 +60,37 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     @Override
     public Optional<StopTimeValidationResult> findStopTimeById(long validationId) {
         return Optional.ofNullable(stopById.get(validationId));
+    }
+
+    @Override
+    public boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, com.gbconnected.kpivalidation.domain.MassPerformanceVariable variable) {
+        return byMass.containsKey(massKey(lineId, businessDate, uomId, variable));
+    }
+
+    @Override
+    public synchronized MassPerformanceValidationResult createMassPerformance(MassPerformanceValidationPersistenceRequest r) {
+        String key = massKey(r.lineId(), r.businessDate(), r.uomId(), r.variable());
+        if (byMass.containsKey(key)) {
+            throw new ValidationAlreadyExistsException("This mass performance value already has a validation proposal");
+        }
+        long id = sequence.incrementAndGet();
+        MassPerformanceValidationResult result = new MassPerformanceValidationResult(
+                id, "PENDING", r.plantId(), r.lineId(), r.businessDate(), r.uomId(), r.variable(),
+                r.originalValue(), r.proposedValue(), r.sourceAggregateKey(), r.sourceType(), r.reasonType(),
+                r.justification(), r.operationalCause(), r.actionPlan(), r.incidentReference(), r.proposedByUserId(),
+                r.proposedAt(), r.expiresAt(), null, null, List.of());
+        massById.put(id, result);
+        byMass.put(key, id);
+        return result;
+    }
+
+    @Override
+    public Optional<MassPerformanceValidationResult> findMassPerformanceById(long validationId) {
+        return Optional.ofNullable(massById.get(validationId));
+    }
+
+    private static String massKey(long lineId, LocalDate businessDate, long uomId, com.gbconnected.kpivalidation.domain.MassPerformanceVariable variable) {
+        return lineId + ":" + businessDate + ":" + variable.name() + ":" + uomId;
     }
 
     private static String stopKey(long lineId, LocalDate businessDate, long stopClassificationId) {

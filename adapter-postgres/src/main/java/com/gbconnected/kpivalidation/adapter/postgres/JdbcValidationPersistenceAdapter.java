@@ -3,6 +3,7 @@ package com.gbconnected.kpivalidation.adapter.postgres;
 import com.gbconnected.kpivalidation.application.*;
 import com.gbconnected.kpivalidation.application.port.out.ValidationPersistencePort;
 import com.gbconnected.kpivalidation.domain.ValidationReasonType;
+import com.gbconnected.kpivalidation.domain.MassPerformanceVariable;
 import java.sql.*;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -270,6 +271,129 @@ public final class JdbcValidationPersistenceAdapter implements ValidationPersist
         } catch (SQLException ex) {
             throw new IllegalStateException("Unable to read stop-time validation", ex);
         }
+    }
+
+
+    @Override
+    public boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, MassPerformanceVariable variable) {
+        String key = massKey(lineId, businessDate, uomId, variable);
+        String sql = "SELECT EXISTS (SELECT 1 FROM kpi.kpi_validation_mass_detail WHERE validation_key = ?)";
+        try (Connection c = dataSource.getConnection(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setString(1, key);
+            try (ResultSet r = p.executeQuery()) { r.next(); return r.getBoolean(1); }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Unable to check existing mass-performance validation", ex);
+        }
+    }
+
+    @Override
+    public MassPerformanceValidationResult createMassPerformance(MassPerformanceValidationPersistenceRequest request) {
+        Objects.requireNonNull(request);
+        try (Connection c = dataSource.getConnection()) {
+            boolean oldAutoCommit = c.getAutoCommit();
+            c.setAutoCommit(false);
+            try {
+                setAuditContext(c, request.proposedByUserId(), request.correlationId());
+                try (PreparedStatement lock = c.prepareStatement("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))")) {
+                    lock.setString(1, request.validationKey());
+                    lock.execute();
+                }
+                if (existsForMassPerformance(c, request.validationKey())) {
+                    throw new ValidationAlreadyExistsException("This mass performance value already has a validation proposal");
+                }
+
+                long validationId;
+                String headerSql = """
+                        INSERT INTO kpi.kpi_validation
+                            (plant_id, line_id, oee_date, status_code, reason_type, justification, cause,
+                             action_plan, incident_reference, proposed_by_user_id, proposed_at, expires_at, created_at)
+                        VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        RETURNING kpi_validation_id
+                        """;
+                try (PreparedStatement p = c.prepareStatement(headerSql)) {
+                    p.setLong(1, request.plantId()); p.setLong(2, request.lineId()); p.setObject(3, request.businessDate());
+                    p.setString(4, request.reasonType().name()); setNullableString(p,5,request.justification());
+                    setNullableString(p,6,request.operationalCause()); setNullableString(p,7,request.actionPlan());
+                    setNullableString(p,8,request.incidentReference()); p.setLong(9,request.proposedByUserId());
+                    p.setObject(10, utc(request.proposedAt())); p.setObject(11, utc(request.expiresAt())); p.setObject(12, utc(request.proposedAt()));
+                    try (ResultSet r = p.executeQuery()) { if (!r.next()) throw new SQLException("No kpi_validation_id returned"); validationId = r.getLong(1); }
+                }
+
+                long detailId;
+                String detailSql = """
+                        INSERT INTO kpi.kpi_validation_detail
+                            (kpi_validation_id, kpi_result_id, stop_classification_id, original_value, proposed_value, uom_id, created_at)
+                        VALUES (?, NULL, NULL, ?, ?, ?, ?)
+                        RETURNING kpi_validation_detail_id
+                        """;
+                try (PreparedStatement p = c.prepareStatement(detailSql)) {
+                    p.setLong(1, validationId); p.setBigDecimal(2, request.originalValue()); p.setBigDecimal(3, request.proposedValue());
+                    p.setLong(4, request.uomId()); p.setObject(5, utc(request.proposedAt()));
+                    try (ResultSet r = p.executeQuery()) { if (!r.next()) throw new SQLException("No kpi_validation_detail_id returned"); detailId = r.getLong(1); }
+                }
+
+                String massSql = """
+                        INSERT INTO kpi.kpi_validation_mass_detail
+                            (kpi_validation_detail_id, validation_key, mass_variable_code, source_aggregate_key, source_type, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """;
+                try (PreparedStatement p = c.prepareStatement(massSql)) {
+                    p.setLong(1, detailId); p.setString(2, request.validationKey()); p.setString(3, request.variable().name());
+                    p.setString(4, request.sourceAggregateKey()); p.setString(5, request.sourceType()); p.setObject(6, utc(request.proposedAt())); p.executeUpdate();
+                }
+
+                c.commit(); c.setAutoCommit(oldAutoCommit);
+                return findMassPerformanceById(validationId).orElseThrow(() -> new IllegalStateException("Persisted mass validation could not be reloaded"));
+            } catch (RuntimeException | SQLException ex) {
+                try { c.rollback(); } catch (SQLException ignored) { }
+                try { c.setAutoCommit(oldAutoCommit); } catch (SQLException ignored) { }
+                if (ex instanceof RuntimeException re) throw re;
+                throw new IllegalStateException("Unable to persist mass-performance validation", ex);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Unable to open mass-performance validation transaction", ex);
+        }
+    }
+
+    @Override
+    public Optional<MassPerformanceValidationResult> findMassPerformanceById(long validationId) {
+        String sql = """
+                SELECT v.kpi_validation_id, v.status_code, v.plant_id, v.line_id, v.oee_date,
+                       d.uom_id, d.original_value, d.proposed_value,
+                       md.mass_variable_code, md.source_aggregate_key, md.source_type,
+                       v.reason_type, v.justification, v.cause, v.action_plan, v.incident_reference,
+                       v.proposed_by_user_id, v.proposed_at, v.expires_at, v.approved_by_user_id, v.approved_at
+                  FROM kpi.kpi_validation v
+                  JOIN kpi.kpi_validation_detail d ON d.kpi_validation_id = v.kpi_validation_id
+                  JOIN kpi.kpi_validation_mass_detail md ON md.kpi_validation_detail_id = d.kpi_validation_detail_id
+                 WHERE v.kpi_validation_id = ?
+                 LIMIT 1
+                """;
+        try (Connection c = dataSource.getConnection(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setLong(1, validationId);
+            try (ResultSet r = p.executeQuery()) {
+                if (!r.next()) return Optional.empty();
+                Long approvedBy = nullableLong(r, "approved_by_user_id");
+                return Optional.of(new MassPerformanceValidationResult(
+                        r.getLong("kpi_validation_id"), r.getString("status_code"), r.getLong("plant_id"), nullableLong(r,"line_id"),
+                        r.getObject("oee_date", LocalDate.class), r.getLong("uom_id"), MassPerformanceVariable.valueOf(r.getString("mass_variable_code")),
+                        r.getBigDecimal("original_value"), r.getBigDecimal("proposed_value"), r.getString("source_aggregate_key"), r.getString("source_type"),
+                        ValidationReasonType.valueOf(r.getString("reason_type")), r.getString("justification"), r.getString("cause"), r.getString("action_plan"),
+                        r.getString("incident_reference"), r.getLong("proposed_by_user_id"), instant(r,"proposed_at"), instant(r,"expires_at"), approvedBy, instant(r,"approved_at"), List.of()));
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Unable to read mass-performance validation", ex);
+        }
+    }
+
+    private boolean existsForMassPerformance(Connection c, String validationKey) throws SQLException {
+        try (PreparedStatement p = c.prepareStatement("SELECT EXISTS (SELECT 1 FROM kpi.kpi_validation_mass_detail WHERE validation_key = ?)")) {
+            p.setString(1, validationKey); try (ResultSet r = p.executeQuery()) { r.next(); return r.getBoolean(1); }
+        }
+    }
+
+    private static String massKey(long lineId, LocalDate businessDate, long uomId, MassPerformanceVariable variable) {
+        return "mass:line:" + lineId + ":date:" + businessDate + ":variable:" + variable.name() + ":uom:" + uomId;
     }
 
     private boolean existsForStopTime(Connection c, long lineId, LocalDate businessDate, long stopClassificationId) throws SQLException {

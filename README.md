@@ -34,6 +34,8 @@ Los adapters de Specs 04-05 todavía reflejan la baseline anterior y se migrará
 - `GET /api/v1/oee-validation/masses/policy`
 - `GET /api/v1/oee-validation/masses/reference?plantId=&lineId=&businessDate=`
 - `POST /api/v1/oee-validation/masses/prevalidate`
+- `POST /api/v1/oee-validation/masses/validations`
+- `GET /api/v1/oee-validation/masses/validations/{validationId}`
 - `GET /api/v1/health`
 
 ### Prevalidate
@@ -193,3 +195,8 @@ mvn clean verify
 ```
 
 Después, empaquetar el runtime requerido. Esto es especialmente importante cuando se integran patches incrementales: un `target/` anterior puede arrancar correctamente pero no contener los endpoints/clases más recientes.
+
+
+### Spec 05 database extension
+
+Apply `database/12_kpi_mass_validation.sql` before enabling durable mass-validation submission in PostgreSQL.

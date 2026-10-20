@@ -34,6 +34,8 @@ public class OeeValidationController {
     private final GetMassPerformanceReferenceUseCase massPerformanceReference;
     private final GetMassPerformancePolicyUseCase massPerformancePolicy;
     private final PrevalidateMassPerformanceCorrectionUseCase massPerformancePrevalidation;
+    private final SubmitMassPerformanceValidationUseCase massPerformanceSubmission;
+    private final GetMassPerformanceValidationUseCase massPerformanceValidationDetail;
     private final GetJustificationPolicyUseCase justificationPolicy;
     private final GetAuditPolicyUseCase auditPolicy;
     private final GetWorkflowPolicyUseCase workflowPolicy;
@@ -56,6 +58,8 @@ public class OeeValidationController {
             GetMassPerformanceReferenceUseCase massPerformanceReference,
             GetMassPerformancePolicyUseCase massPerformancePolicy,
             PrevalidateMassPerformanceCorrectionUseCase massPerformancePrevalidation,
+            SubmitMassPerformanceValidationUseCase massPerformanceSubmission,
+            GetMassPerformanceValidationUseCase massPerformanceValidationDetail,
             GetJustificationPolicyUseCase justificationPolicy,
             GetAuditPolicyUseCase auditPolicy,
             GetWorkflowPolicyUseCase workflowPolicy) {
@@ -77,6 +81,8 @@ public class OeeValidationController {
         this.massPerformanceReference = massPerformanceReference;
         this.massPerformancePolicy = massPerformancePolicy;
         this.massPerformancePrevalidation = massPerformancePrevalidation;
+        this.massPerformanceSubmission = massPerformanceSubmission;
+        this.massPerformanceValidationDetail = massPerformanceValidationDetail;
         this.justificationPolicy = justificationPolicy;
         this.auditPolicy = auditPolicy;
         this.workflowPolicy = workflowPolicy;
@@ -297,6 +303,32 @@ public class OeeValidationController {
                 actor.tenantId(), actor.objectId(), request.plantId(), request.lineId(), request.businessDate(),
                 request.uomId(), request.variable(), request.reasonType(), correlationId(), result.businessRulesValid(),
                 result.readyForSubmission());
+        return result;
+    }
+
+    @PostMapping("/masses/validations")
+    @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    public MassPerformanceValidationResult submitMass(@AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody MassPerformancePrevalidationHttpRequest request) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        MassPerformanceValidationResult result = massPerformanceSubmission.submitMassPerformance(actor,
+                new PrevalidateMassPerformanceCorrectionCommand(
+                        request.plantId(), request.lineId(), request.businessDate(), request.uomId(),
+                        request.variable(), request.originalValue(), request.proposedValue(), request.reasonType(),
+                        request.incidentNumber(), request.operationalCause(), request.actionPlan()), correlationId());
+        LOG.info("event=kpi_mass_validation_created actorTenant={} actorObject={} validationId={} plantId={} lineId={} businessDate={} uomId={} variable={} status={} correlationId={} result=OK",
+                actor.tenantId(), actor.objectId(), result.validationId(), result.plantId(), result.lineId(),
+                result.businessDate(), result.uomId(), result.variable(), result.status(), correlationId());
+        return result;
+    }
+
+    @GetMapping("/masses/validations/{validationId}")
+    public MassPerformanceValidationResult massValidationDetail(@AuthenticationPrincipal Jwt jwt,
+            @PathVariable long validationId) {
+        ActorContext actor = RequestActorContextResolver.resolve(jwt);
+        MassPerformanceValidationResult result = massPerformanceValidationDetail.getMassPerformanceValidation(actor, validationId);
+        LOG.info("event=kpi_mass_validation_detail actorTenant={} actorObject={} validationId={} plantId={} lineId={} variable={} status={} correlationId={} result=OK",
+                actor.tenantId(), actor.objectId(), validationId, result.plantId(), result.lineId(), result.variable(), result.status(), correlationId());
         return result;
     }
 

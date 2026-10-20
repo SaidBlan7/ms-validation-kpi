@@ -28,3 +28,6 @@
 
 - **Spec 01:** queda confirmado que la regla temporal actual es D-1 calendario y que fines de semana/festivos no se saltan. Permanece abierta únicamente la semántica de 24 horas/corte OEE y la autoridad final de timezone.
 - **Spec 02:** la asignación específica de planta se aplica también a `temporal-context`, `eligibility` y cualquier operación con fecha; una revocación impide nuevas consultas/modificaciones aunque el cliente conserve una URL previa.
+## Alineación posterior
+
+- Spec 05 reuses Spec 03 D-1 server-side recalculation on reference, prevalidation and submission; weekends/holidays are not skipped.

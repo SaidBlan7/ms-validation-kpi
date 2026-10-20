@@ -473,6 +473,68 @@ public class KpiValidationFunctions {
         }
     }
 
+
+    @FunctionName("kpi-validation-mass-submit")
+    public HttpResponseMessage massSubmit(
+            @HttpTrigger(name = "req", methods = {HttpMethod.POST}, route = "v1/oee-validation/masses/validations", authLevel = AuthorizationLevel.FUNCTION)
+            HttpRequestMessage<Optional<String>> req,
+            ExecutionContext ctx) {
+        String correlationId = correlation(req);
+        try {
+            JsonObject body = JsonParser.parseString(
+                    req.getBody().orElseThrow(() -> new IllegalArgumentException("JSON body is required")))
+                    .getAsJsonObject();
+            var command = new PrevalidateMassPerformanceCorrectionCommand(
+                    longVal(body, "plantId"), longVal(body, "lineId"), LocalDate.parse(str(body, "businessDate")),
+                    longVal(body, "uomId"), MassPerformanceVariable.valueOf(str(body, "variable").toUpperCase(Locale.ROOT)),
+                    new BigDecimal(str(body, "originalValue")), new BigDecimal(str(body, "proposedValue")),
+                    ValidationReasonType.valueOf(str(body, "reasonType").toUpperCase(Locale.ROOT)),
+                    nullable(body, "incidentNumber"), nullable(body, "operationalCause"), nullable(body, "actionPlan"));
+            ActorContext actor = FunctionActorContextResolver.resolve(req);
+            MassPerformanceValidationResult result = FunctionRuntime.RUNTIME.massPerformanceSubmission()
+                    .submitMassPerformance(actor, command, correlationId);
+            ctx.getLogger().info("event=kpi_mass_validation_created actorTenant=" + actor.tenantId()
+                    + " actorObject=" + actor.objectId() + " validationId=" + result.validationId()
+                    + " plantId=" + result.plantId() + " lineId=" + result.lineId() + " businessDate=" + result.businessDate()
+                    + " variable=" + result.variable() + " uomId=" + result.uomId() + " status=" + result.status()
+                    + " correlationId=" + correlationId + " result=OK");
+            return json(req, HttpStatus.CREATED, result, correlationId);
+        } catch (SecurityException ex) {
+            return reject(req, ctx, HttpStatus.UNAUTHORIZED, ex.getMessage(), correlationId);
+        } catch (AuthorizationException ex) {
+            return reject(req, ctx, HttpStatus.FORBIDDEN, ex.getMessage(), correlationId);
+        } catch (Exception ex) {
+            return reject(req, ctx, HttpStatus.BAD_REQUEST, ex.getMessage(), correlationId);
+        }
+    }
+
+    @FunctionName("kpi-validation-mass-detail")
+    public HttpResponseMessage massValidationDetail(
+            @HttpTrigger(name = "req", methods = {HttpMethod.GET}, route = "v1/oee-validation/masses/validations/{validationId}", authLevel = AuthorizationLevel.FUNCTION)
+            HttpRequestMessage<Optional<String>> req,
+            @BindingName("validationId") long validationId,
+            ExecutionContext ctx) {
+        String correlationId = correlation(req);
+        try {
+            ActorContext actor = FunctionActorContextResolver.resolve(req);
+            MassPerformanceValidationResult result = FunctionRuntime.RUNTIME.massPerformanceValidationDetail()
+                    .getMassPerformanceValidation(actor, validationId);
+            ctx.getLogger().info("event=kpi_mass_validation_detail actorTenant=" + actor.tenantId()
+                    + " actorObject=" + actor.objectId() + " validationId=" + validationId
+                    + " plantId=" + result.plantId() + " lineId=" + result.lineId() + " variable=" + result.variable()
+                    + " status=" + result.status() + " correlationId=" + correlationId + " result=OK");
+            return json(req, HttpStatus.OK, result, correlationId);
+        } catch (SecurityException ex) {
+            return reject(req, ctx, HttpStatus.UNAUTHORIZED, ex.getMessage(), correlationId);
+        } catch (AuthorizationException ex) {
+            return reject(req, ctx, HttpStatus.FORBIDDEN, ex.getMessage(), correlationId);
+        } catch (ValidationNotFoundException ex) {
+            return reject(req, ctx, HttpStatus.NOT_FOUND, ex.getMessage(), correlationId);
+        } catch (Exception ex) {
+            return reject(req, ctx, HttpStatus.BAD_REQUEST, ex.getMessage(), correlationId);
+        }
+    }
+
     @FunctionName("kpi-validation-prevalidate")
     public HttpResponseMessage prevalidate(
             @HttpTrigger(name = "req", methods = {HttpMethod.POST}, route = "v1/oee-validation/prevalidate", authLevel = AuthorizationLevel.FUNCTION)
