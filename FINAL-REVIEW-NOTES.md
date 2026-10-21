@@ -88,3 +88,11 @@ Implemented/prepared as far as possible without validation persistence:
 - Spec 07 runtime smoke: canonical user id/name/email/active snapshot takes precedence over token snapshots and the event instant is preserved.
 - OpenAPI YAML parses as `0.10.0` with 17 paths.
 - No canonical database writes or DDL were added.
+
+
+## Specs 06-07 current canonical pass
+
+- OEE and stop-time validations persist Spec 06 evidence atomically using existing canonical columns.
+- Persisted OEE/stop-time reads now return Spec 07 canonical actor/timestamp evidence.
+- Exact historical display-name/email snapshots are not representable in the current schema; immutable ids and `proposed_at` remain durable.
+- The previous Spec 05 non-canonical mass-detail table assumption has been removed.

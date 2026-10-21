@@ -679,7 +679,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "PENDING_FUNCTIONAL_DEFINITION",
                 "RECHECK_BEFORE_SUBMISSION; POST_PERSISTENCE_PRECEDENCE_PENDING_DEFINITION",
                 ValidationWorkflowStatus.PENDING.name(),
-                validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION_MASS_DETAIL" : "UNAVAILABLE");
+                validationPersistence.supportsMassPerformancePersistence() ? "IMPLEMENTED" : "PENDING_CANONICAL_DATA_MODEL");
     }
 
     @Override
@@ -759,9 +759,9 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "Fractional canonical values are accepted without additional application rounding; final precision and rounding remain undefined in Spec 05"));
         issues.add(ValidationIssue.warning("LATE_AUTOMATIC_DATA_POST_PERSISTENCE_PRECEDENCE_PENDING",
                 "The server rechecks the source before submission, but Spec 05 does not define what wins if automatic data changes after a validation proposal has already been persisted"));
-        if (!validationPersistence.available()) {
-            issues.add(ValidationIssue.warning("VALIDATION_PERSISTENCE_UNAVAILABLE",
-                    "Prevalidation is available, but this runtime cannot persist mass-performance proposals"));
+        if (!validationPersistence.supportsMassPerformancePersistence()) {
+            issues.add(ValidationIssue.warning("MASS_PERSISTENCE_PENDING_CANONICAL_DATA_MODEL",
+                    "Prevalidation is available, but the current canonical schema does not durably identify ELABORATED_MASS versus DELIVERED_MASS in kpi_validation_detail. No non-canonical table is assumed."));
         } else if (command.variable() != null && command.uomId() > 0
                 && validationPersistence.existsForMassPerformance(command.lineId(), command.businessDate(), command.uomId(), command.variable())) {
             issues.add(ValidationIssue.blocker("MASS_VALUE_ALREADY_VALIDATED",
@@ -769,12 +769,12 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         }
 
         boolean valid = issues.stream().noneMatch(i -> i.severity() == Severity.BLOCKER);
-        return new MassPerformanceCorrectionPrevalidationResult(valid, valid && validationPersistence.available(), command.plantId(), command.lineId(),
+        return new MassPerformanceCorrectionPrevalidationResult(valid, valid && validationPersistence.supportsMassPerformancePersistence(), command.plantId(), command.lineId(),
                 command.businessDate(), command.uomId(), command.variable(),
                 command.originalValue(), command.proposedValue(), observedReferenceValue,
                 originalMatchesOperationalReference, sourceAggregateKey, sourceType, justification,
                 auditEvidence(actor), massPerformanceReference.source(), ValidationWorkflowStatus.PENDING.name(),
-                validationPersistence.available() ? "CANONICAL_KPI_VALIDATION_MASS_DETAIL_READY" : "UNAVAILABLE", List.copyOf(issues));
+                validationPersistence.supportsMassPerformancePersistence() ? "CANONICAL_PERSISTENCE_READY" : "PENDING_CANONICAL_DATA_MODEL", List.copyOf(issues));
     }
 
     @Override
@@ -821,7 +821,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 result.businessDate(), result.uomId(), result.variable(), result.originalValue(), result.proposedValue(),
                 result.sourceAggregateKey(), result.sourceType(), result.reasonType(), result.justification(),
                 result.operationalCause(), result.actionPlan(), result.incidentReference(), result.proposedByUserId(),
-                result.proposedAt(), result.expiresAt(), result.approvedByUserId(), result.approvedAt(), List.copyOf(issues));
+                result.proposedAt(), result.expiresAt(), result.approvedByUserId(), result.approvedAt(), result.auditEvidence(), List.copyOf(issues));
     }
 
 
@@ -944,11 +944,11 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 actorIdentity.canonicalUserIdAvailable() ? "IMPLEMENTED_APP_SECURITY_USER_ID" : "NOT_AVAILABLE_IN_CURRENT_ADAPTER",
                 actorIdentity.source(),
                 List.of("displayNameSnapshot", "principalNameSnapshot"),
-                "APP_SECURITY_SNAPSHOT_THEN_AUTHENTICATION_CLAIM_FALLBACK",
+                "PREVALIDATION_USES_APP_SECURITY_THEN_AUTH_CLAIMS; PERSISTED_DETAIL_READS_CURRENT_APP_SECURITY_PROFILE",
                 "ABSOLUTE_INSTANT_UTC",
                 "PENDING_PRESENTATION_TIMEZONE_DEFINITION",
                 validationPersistence.available() ? "IMPLEMENTED_KPI_VALIDATION_AUDIT_TRIGGERS" : "UNAVAILABLE",
-                validationPersistence.available() ? "CANONICAL_USER_AND_TIMESTAMP_PERSISTED" : "PREVALIDATION_ONLY",
+                validationPersistence.available() ? "CANONICAL_USER_AND_TIMESTAMP_PERSISTED; DISPLAY_PROFILE_NOT_HISTORICALLY_SNAPSHOTTED" : "PREVALIDATION_ONLY",
                 "PENDING_DEFINITION",
                 "APPROVAL_AND_REPORTING_RECONCILIATION_OWNED_BY_DEPENDENT_MODULES");
     }
@@ -1141,7 +1141,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Spec 05 accepts canonical decimal zero/positive values, rejects negatives, and requires a canonical UOM with dimension_code=MASS"),
                 new CapabilityView("massPerformanceVariableEnablement", "IMPLEMENTED_SEMANTIC_CODES",
                         "ELABORATED_MASS and DELIVERED_MASS are explicit variables; derived metric codes are configurable through GBC_ELABORATED_MASS_METRIC_CODE and GBC_DELIVERED_MASS_METRIC_CODE"),
-                new CapabilityView("massPerformancePersistence", "IMPLEMENTED", "Durable PENDING proposals use kpi_validation + kpi_validation_detail + kpi_validation_mass_detail with one-opportunity key"),
+                new CapabilityView("massPerformancePersistence", "PENDING_CANONICAL_DATA_MODEL", "Spec 05 prevalidation is implemented, but the current canonical schema cannot durably distinguish ELABORATED_MASS from DELIVERED_MASS without a future approved model change; no extra table is assumed"),
                 new CapabilityView("massPerformanceMissingOriginal", "IMPLEMENTED_CONSERVATIVE",
                         "A missing canonical source row is not converted to zero because Spec 05 is a correction flow rather than KPI Manual capture-from-zero"),
                 new CapabilityView("massPerformanceRelationRule", "PENDING_DEFINITION",
@@ -1154,8 +1154,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Canonical app_security.user_id and proposed_at are persisted on kpi.kpi_validation; audit triggers capture actor/source/correlation context"),
                 new CapabilityView("auditTimestampSemantics", "IMPLEMENTED",
                         "Spec 07 represents the validation/prevalidation event time as an absolute UTC Instant so a later presentation timezone cannot change the recorded instant"),
-                new CapabilityView("persistedAuditReconciliation", "IMPLEMENTED_FOR_VALIDATION_STEP",
-                        "Validation proposal actor/timestamp are persisted; Approval/report reconciliation remains owned by their dependent modules"),
+                new CapabilityView("persistedAuditReconciliation", "IMPLEMENTED_FOR_OEE_AND_STOP_VALIDATION",
+                        "Persisted OEE/stop validation detail exposes canonical user id, immutable Entra tenant/object ids from app_security.user_identity, and proposed_at; exact historical name/email snapshots are not representable in the current schema"),
                 new CapabilityView("oeeOriginalValueSource", "IMPLEMENTED_READ_ONLY_V1_2",
                         "Reads the latest canonical kpi.kpi_result for the requested kpi_definition.kpi_code when its line-level period exactly matches the provisional local D-1 window"),
                 new CapabilityView("validationWorkflowContract", "IMPLEMENTED_CANONICAL",

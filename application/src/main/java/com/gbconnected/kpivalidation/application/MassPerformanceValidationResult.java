@@ -29,5 +29,6 @@ public record MassPerformanceValidationResult(
         Instant expiresAt,
         Long approvedByUserId,
         Instant approvedAt,
+        ValidationAuditEvidenceView auditEvidence,
         List<ValidationIssue> issues) {
 }

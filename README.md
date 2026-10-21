@@ -171,19 +171,19 @@ La regla de suma total, una eventual aplicabilidad distinta por línea, agrupaci
 - Motivos permitidos: `OPERATIVE` y `SYSTEM`.
 - `OPERATIVE` exige `operationalCause` + `actionPlan`; `SYSTEM` exige `incidentNumber`.
 - La prevalidación devuelve `justification` normalizada y descarta campos del motivo anterior.
+- OEE general y tiempos de paro persisten motivo/causa/plan/incidente de forma atómica en `kpi.kpi_validation`.
 - `GET /api/v1/oee-validation/justification/policy` publica la matriz efectiva.
-- Longitudes opcionales: `GBC_INCIDENT_NUMBER_MAX_LENGTH`, `GBC_OPERATIONAL_CAUSE_MAX_LENGTH`, `GBC_ACTION_PLAN_MAX_LENGTH`; `0`/ausente significa pendiente de definición y no impone un máximo arbitrario.
-- `GBC_INCIDENT_NUMBER_REGEX` permite validar localmente un formato cuando exista; no sustituye una futura validación contra GB Support.
-- La política de datos sensibles y la persistencia atómica con la validación siguen pendientes.
+- Longitudes y regex son opcionales/configurables; no sustituyen validación online contra GB Support.
+- Spec 05 conserva la justificación en prevalidación, pero su persistencia sigue bloqueada por el modelo canónico de masas.
 
 ## Spec 07 - fecha, hora y usuario de la validación
 
-- Las tres prevalidaciones devuelven `auditEvidence` con `tid`, `oid`, identidad inmutable, snapshots de presentación y `eventTimestamp`.
-- En PostgreSQL/Lakebase se añade `canonicalUserId` resuelto desde `app_security.user_identity.user_id`, junto con snapshot de `display_name`, `corporate_email` e `is_active`.
-- La identidad inmutable externa sigue siendo `tid + oid`; `canonicalUserId` prepara el enlace al FK interno de una futura entidad `kpi_validation`.
-- `eventTimestamp` es un `Instant` absoluto ISO-8601/UTC; la zona/formato de presentación siguen pendientes.
-- `GET /api/v1/oee-validation/audit/policy` publica la fuente canónica/fallback y los puntos pendientes.
-- La evidencia sigue marcada `PREVALIDATION_EVIDENCE_ONLY_PENDING_PERSISTENCE`: no se representa como auditoría histórica hasta que exista almacenamiento del workflow.
+- Las prevalidaciones devuelven `auditEvidence` con `tid`, `oid`, identidad inmutable y `eventTimestamp`.
+- OEE general y tiempos persisten `proposed_by_user_id` + `proposed_at`.
+- Las consultas de detalle unen al usuario canónico para exponer `user_id`, ids Entra, nombre/correo actuales y estado de cuenta junto al timestamp persistido.
+- `eventTimestamp` usa `Instant` UTC, preservando el instante absoluto.
+- `GET /api/v1/oee-validation/audit/policy` publica la semántica de identidad/timestamp.
+- La base no conserva snapshot histórico del nombre/correo dentro de la validación; si cambian, el id inmutable y `user_id` siguen siendo reconciliables pero el perfil visible será el actual.
 
 ## Artefactos de build
 
@@ -197,6 +197,3 @@ mvn clean verify
 Después, empaquetar el runtime requerido. Esto es especialmente importante cuando se integran patches incrementales: un `target/` anterior puede arrancar correctamente pero no contener los endpoints/clases más recientes.
 
 
-### Spec 05 database extension
-
-Apply `database/12_kpi_mass_validation.sql` before enabling durable mass-validation submission in PostgreSQL.

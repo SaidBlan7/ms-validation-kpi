@@ -7,6 +7,9 @@ import java.util.Optional;
 public interface ValidationPersistencePort {
     boolean available();
 
+    /** Mass-performance persistence needs a durable variable identity that is not present in the current canonical schema. */
+    default boolean supportsMassPerformancePersistence() { return false; }
+
     OeeValidationResult create(ValidationPersistenceRequest request);
     Optional<OeeValidationResult> findById(long validationId);
     boolean existsForKpiResult(long kpiResultId);

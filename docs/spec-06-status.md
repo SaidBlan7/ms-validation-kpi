@@ -2,40 +2,27 @@
 
 ## Implementado
 
-- Catálogo funcional cerrado a `OPERATIVE` y `SYSTEM` mediante `ValidationReasonType`.
-- `OPERATIVE` exige `operationalCause` y `actionPlan` no vacíos.
-- `SYSTEM` exige `incidentNumber` no vacío.
-- Normalización en servidor: `strip()` de espacios exteriores, normalización CR/LF en texto libre y rechazo de caracteres de control no soportados.
-- Al cambiar de motivo, los campos que ya no corresponden se descartan para evitar evidencia obsoleta:
-  - `SYSTEM` conserva sólo `incidentNumber`.
-  - `OPERATIVE` conserva sólo `operationalCause` + `actionPlan`.
-- Las tres prevalidaciones devuelven `justification` normalizada junto con valor original/propuesto.
-- Se informa con warning cuando llegaron campos obsoletos del motivo anterior y fueron descartados.
-- `GET /api/v1/oee-validation/justification/policy` publica motivos, campos requeridos y la política técnica vigente.
-- Longitudes máximas opcionales y configurables, medidas en Unicode code points:
-  - `GBC_INCIDENT_NUMBER_MAX_LENGTH`
-  - `GBC_OPERATIONAL_CAUSE_MAX_LENGTH`
-  - `GBC_ACTION_PLAN_MAX_LENGTH`
-  - valor ausente o `0` significa que la longitud de negocio/UX sigue sin definición y no se impone un máximo arbitrario.
-- Formato de incidente opcional mediante `GBC_INCIDENT_NUMBER_REGEX`; si está configurado se valida localmente y un regex inválido impide arrancar el runtime.
-- Los logs incluyen `reasonType`, actor, alcance, resultado y correlation ID, pero no registran causa/plan/incidente completos.
-- App Service, Azure Functions, OpenAPI y capabilities actualizados.
-- Sin INSERT/UPDATE/DELETE ni DDL sobre la base canónica.
+- Sólo se aceptan `OPERATIVE` y `SYSTEM`.
+- `OPERATIVE` exige causa y plan de acción no vacíos.
+- `SYSTEM` exige número de incidente no vacío.
+- Se normalizan espacios/line endings y se rechazan caracteres de control no soportados.
+- Al cambiar de motivo se descartan campos que ya no aplican, evitando evidencia obsoleta.
+- Las prevalidaciones OEE, tiempos y masas devuelven la justificación normalizada.
+- OEE general y tiempos de paro persisten motivo/causa/plan/incidente atómicamente en las columnas existentes de `kpi.kpi_validation`.
+- `GET /api/v1/oee-validation/justification/policy` expone motivos, campos requeridos y política técnica.
+- Longitudes máximas y regex de incidente son opcionales/configurables; no se inventa un límite ni patrón de negocio.
+- Los logs no escriben causa/plan/incidente completos.
+- No se agregan tablas ni columnas.
+
+## Limitación heredada de Spec 05
+
+La justificación de masas se valida y normaliza, pero no puede persistirse como una propuesta de masa mientras el modelo canónico no pueda identificar durablemente `ELABORATED_MASS`/`DELIVERED_MASS`.
 
 ## Pendiente / dependencia externa
 
-- Para OEE general, la justificación ya se persiste atómicamente en `kpi.kpi_validation`; Stop Time y Mass Performance continúan sólo en prevalidación hasta definir su persistencia canónica.
-- Mostrar la justificación desde Aprobación KPI e histórico/auditoría persistente.
-- Valores oficiales de longitud UX si se desea que la configuración sea canónica y no sólo técnica.
-- Patrón/formato oficial del número de incidente si no se acepta configuración local.
-- Validación online del incidente contra GB Support.
-- Política oficial para datos sensibles en campos de texto libre.
-- Comentarios adicionales de aprobación/rechazo, que pertenecen al módulo de Aprobación KPI.
-
-## Decisiones conservadoras
-
-- No se inventa un máximo de negocio: los límites sólo se aplican cuando están explícitamente configurados.
-- No se inventa prefijo `INC-`, UUID u otro patrón; el regex es opcional y administrable.
-- La validación regex no se presenta como validación contra GB Support.
-- No se intenta detectar/redactar automáticamente datos sensibles sin una política aprobada.
-- Los consumidores deben escapar texto libre al renderizarlo; el backend normaliza y valida, no transforma HTML en contenido distinto.
+- Mostrar la misma evidencia desde Aprobación KPI y reportes.
+- Valores oficiales de longitud UX, si se desean límites canónicos.
+- Patrón/formato oficial del incidente.
+- Validación online contra GB Support (la Spec confirma captura, no la integración).
+- Política oficial de datos sensibles en texto libre.
+- Comentarios adicionales al aprobar/rechazar pertenecen a Aprobación KPI.

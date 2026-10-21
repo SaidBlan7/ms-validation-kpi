@@ -1,10 +1,9 @@
 
-## Spec 05 - durable mass validation
+## Spec 05 - canonical-schema correction
 
-- Added durable PENDING submission/detail flows for elaborated/delivered mass corrections.
-- Added `kpi.kpi_validation_mass_detail` extension with unique line/date/variable/UOM validation identity and source lineage.
-- Submission re-runs D-1/security/UOM/source/original/justification rules and prevents a second validation opportunity.
-- App Service, Functions and OpenAPI expose mass validation create/detail endpoints.
+- Removed the assumption of `kpi.kpi_validation_mass_detail`; no non-canonical table is required.
+- Spec 05 reference/prevalidation remains implemented, but `readyForSubmission=false` while the canonical model cannot durably identify ELABORATED_MASS versus DELIVERED_MASS.
+- Submission endpoints remain contract placeholders and fail before persistence instead of writing ambiguous data.
 # Spec 05 v1.2 — migración canónica y hardening
 
 - eliminado uso legacy de `scheduling.intermediate_material_movement`, `core.item` e `itemId`.
@@ -136,3 +135,12 @@ No se agregan tablas, columnas ni escrituras a la BD canónica.
 - Direct Java 21 source compilation passed for domain/application/memory/PostgreSQL/bootstrap/App Service. Azure Functions source compiled using temporary host API stubs plus packaged dependencies because the received Functions library contains annotations but not the runtime core API classes.
 - Source test compilation passed with lightweight JUnit API stubs; Spec 06 configurable policy and Spec 07 canonical snapshot smoke tests passed.
 - No INSERT/UPDATE/DELETE/CREATE/ALTER/DROP was introduced.
+
+# Specs 06-07 canonical completion + Specs 01-05 alignment
+
+- Spec 06: confirmed `OPERATIVE`/`SYSTEM` validation is shared across OEE, stop-time and mass prevalidation.
+- Spec 06: OEE and stop-time persistence stores reason/cause/action-plan/incident atomically in existing `kpi.kpi_validation` columns.
+- Spec 07: persisted OEE and stop-time detail now exposes audit evidence joined from `app_security.user_identity` plus persisted `proposed_at`.
+- Spec 07: immutable Entra tenant/object ids and canonical user id are returned; current display/email are clearly treated as current profile data, not a historical snapshot.
+- Spec 05: removed every PostgreSQL dependency on `kpi_validation_mass_detail`; no new table/column is assumed.
+- Specs 01-04 remain on the canonical schema; no DDL was introduced.

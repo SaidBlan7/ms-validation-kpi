@@ -27,5 +27,6 @@ public record StopTimeValidationResult(
         Instant expiresAt,
         Long decidedByUserId,
         Instant decidedAt,
+        ValidationAuditEvidenceView auditEvidence,
         List<ValidationIssue> issues) {
 }

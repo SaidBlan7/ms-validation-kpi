@@ -27,7 +27,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
         OeeValidationResult result = new OeeValidationResult(id, "PENDING", r.plantId(), r.lineId(), r.businessDate(),
                 r.metricCode(), r.kpiResultId(), r.originalValue(), r.proposedValue(), r.uomId(), r.reasonType(),
                 r.justification(), r.operationalCause(), r.actionPlan(), r.incidentReference(), r.proposedByUserId(),
-                r.proposedAt(), r.expiresAt(), null, null, List.of());
+                r.proposedAt(), r.expiresAt(), null, null, audit(r.proposedByUserId(), r.proposedAt()), List.of());
         byId.put(id, result); byKpiResult.put(r.kpiResultId(), id); return result;
     }
 
@@ -51,7 +51,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
                 "STOP_" + r.stopClassificationId(), "Stop classification " + r.stopClassificationId(), null,
                 r.originalSeconds(), r.proposedSeconds(), r.reasonType(), r.justification(),
                 r.operationalCause(), r.actionPlan(), r.incidentReference(), r.proposedByUserId(),
-                r.proposedAt(), r.expiresAt(), null, null, List.of());
+                r.proposedAt(), r.expiresAt(), null, null, audit(r.proposedByUserId(), r.proposedAt()), List.of());
         stopById.put(id, result);
         byStopTime.put(key, id);
         return result;
@@ -78,7 +78,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
                 id, "PENDING", r.plantId(), r.lineId(), r.businessDate(), r.uomId(), r.variable(),
                 r.originalValue(), r.proposedValue(), r.sourceAggregateKey(), r.sourceType(), r.reasonType(),
                 r.justification(), r.operationalCause(), r.actionPlan(), r.incidentReference(), r.proposedByUserId(),
-                r.proposedAt(), r.expiresAt(), null, null, List.of());
+                r.proposedAt(), r.expiresAt(), null, null, audit(r.proposedByUserId(), r.proposedAt()), List.of());
         massById.put(id, result);
         byMass.put(key, id);
         return result;
@@ -87,6 +87,13 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     @Override
     public Optional<MassPerformanceValidationResult> findMassPerformanceById(long validationId) {
         return Optional.ofNullable(massById.get(validationId));
+    }
+
+    private static ValidationAuditEvidenceView audit(long userId, java.time.Instant at) {
+        return new ValidationAuditEvidenceView(
+                userId, null, null, null, null, null, true,
+                "IN_MEMORY_CANONICAL_ID_ONLY", at, "ABSOLUTE_INSTANT_UTC",
+                "IN_MEMORY_VALIDATION_PERSISTED");
     }
 
     private static String massKey(long lineId, LocalDate businessDate, long uomId, com.gbconnected.kpivalidation.domain.MassPerformanceVariable variable) {

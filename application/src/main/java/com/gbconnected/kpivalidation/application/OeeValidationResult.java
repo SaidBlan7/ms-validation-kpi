@@ -27,5 +27,6 @@ public record OeeValidationResult(
         Instant expiresAt,
         Long decidedByUserId,
         Instant decidedAt,
+        ValidationAuditEvidenceView auditEvidence,
         List<ValidationIssue> issues) {
 }
