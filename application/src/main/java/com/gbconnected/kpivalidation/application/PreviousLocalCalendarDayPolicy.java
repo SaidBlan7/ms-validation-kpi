@@ -3,10 +3,10 @@ package com.gbconnected.kpivalidation.application;
 import java.time.*;
 
 /**
- * Spec 03 policy implemented with the information currently available:
- * the only editable date is the previous local calendar day in the plant timezone.
- * Weekends and holidays are intentionally not skipped.
- * The official OEE cutoff/24-hour interpretation and authoritative timezone remain open in the spec.
+ * Closed Spec 01/03 temporal policy: the only editable date is the previous
+ * local calendar day in the authoritative plant timezone (core.plant.timezone_name).
+ * Weekends and holidays are intentionally not skipped and this is not a rolling
+ * elapsed-24-hour window.
  */
 public final class PreviousLocalCalendarDayPolicy implements BusinessDatePolicy {
     @Override

@@ -88,7 +88,15 @@ La única fecha elegible es **el día calendario anterior (`D-1`) en la zona hor
 - `revalidateOnSubmit=true`: el backend vuelve a calcular D-1 al guardar/prevalidar, aunque la pantalla no se haya refrescado.
 - Una `timezone_name` vacía o inválida bloquea la operación de forma controlada en vez de producir un error interno.
 
-La interpretación exacta de “máximo 24 hrs”, el corte oficial del día OEE y la autoridad definitiva de timezone continúan pendientes de definición funcional. La política implementada se identifica explícitamente como día calendario local, no como una garantía de 24 horas transcurridas.
+La regla temporal queda cerrada como **D-1 calendario 00:00–00:00 en `core.plant.timezone_name`**, confirmado por Data. No se interpreta como ventana móvil de 24 horas transcurridas.
+
+
+### Cierre Spec 01
+
+- Una propuesta OEE se identifica por `kpi_result_id` y sólo puede crearse una vez a través de este micro; el submit se serializa y vuelve a comprobar existencia dentro de la transacción.
+- `original_value` queda congelado como evidencia de la propuesta. Un recálculo posterior del KPI fuente no modifica ni rebasa la validación ya creada.
+- `expires_at` se calcula al final del día local de **creación de la propuesta** usando `core.plant.timezone_name`, de modo que una propuesta sobre D-1 conserve una ventana de aprobación válida.
+- El micro crea únicamente estado `PENDING`; aprobar, rechazar y aplicar el valor efectivo corresponde al módulo Aprobación KPI.
 
 ## Configuración
 
@@ -195,5 +203,6 @@ mvn clean verify
 ```
 
 Después, empaquetar el runtime requerido. Esto es especialmente importante cuando se integran patches incrementales: un `target/` anterior puede arrancar correctamente pero no contener los endpoints/clases más recientes.
+
 
 

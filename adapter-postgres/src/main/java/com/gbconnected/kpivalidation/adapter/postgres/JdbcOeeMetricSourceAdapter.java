@@ -17,10 +17,10 @@ import javax.sql.DataSource;
 /**
  * v1.2 canonical read-only OEE/KPI source.
  *
- * The exact OEE cutoff remains functionally open, therefore this adapter deliberately resolves only a
- * line-level KPI result whose period exactly matches the current provisional local-calendar D-1 window.
- * It does not fall back to shift/product/execution rows or partial periods because doing so would invent
- * aggregation semantics that are not defined by Spec 01/03.
+ * Closed Spec 01/03 source rule: resolve only a line-level KPI result whose period
+ * exactly matches the authoritative plant-local D-1 calendar window. It does not
+ * fall back to shift/product/execution rows or partial periods, preserving one
+ * canonical original value for the proposal.
  */
 public final class JdbcOeeMetricSourceAdapter implements OeeMetricSourcePort {
     private final DataSource dataSource;

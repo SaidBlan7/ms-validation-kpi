@@ -112,8 +112,7 @@ public class KpiValidationFunctions {
         String correlationId = correlation(req);
         try {
             JsonObject body = JsonParser.parseString(req.getBody().orElseThrow(() -> new IllegalArgumentException("JSON body is required"))).getAsJsonObject();
-            Instant validTo = body.has("validTo") && !body.get("validTo").isJsonNull() ? Instant.parse(body.get("validTo").getAsString()) : null;
-            AssignValidatorCommand command = new AssignValidatorCommand(longVal(body,"targetUserId"), longVal(body,"plantId"), validTo, str(body,"externalApprovalReference"), nullable(body,"reason"));
+            AssignValidatorCommand command = new AssignValidatorCommand(longVal(body,"targetUserId"), longVal(body,"plantId"), str(body,"externalApprovalReference"), nullable(body,"reason"));
             ActorContext actor = FunctionActorContextResolver.resolve(req);
             var result = FunctionRuntime.RUNTIME.validatorAssignmentAdministration().assign(actor, command, correlationId);
             ctx.getLogger().info("event=kpi_validator_assignment_created actorTenant=" + actor.tenantId()
@@ -134,8 +133,7 @@ public class KpiValidationFunctions {
         String correlationId = correlation(req);
         try {
             JsonObject body = JsonParser.parseString(req.getBody().orElseThrow(() -> new IllegalArgumentException("JSON body is required"))).getAsJsonObject();
-            Instant validTo = body.has("validTo") && !body.get("validTo").isJsonNull() ? Instant.parse(body.get("validTo").getAsString()) : null;
-            ModifyValidatorAssignmentCommand command = new ModifyValidatorAssignmentCommand(requiredLong(targetUserId,"targetUserId"), requiredLong(plantId,"plantId"), validTo, str(body,"externalApprovalReference"), nullable(body,"reason"));
+            ModifyValidatorAssignmentCommand command = new ModifyValidatorAssignmentCommand(requiredLong(targetUserId,"targetUserId"), requiredLong(plantId,"plantId"), str(body,"externalApprovalReference"), nullable(body,"reason"));
             ActorContext actor = FunctionActorContextResolver.resolve(req);
             var result = FunctionRuntime.RUNTIME.validatorAssignmentAdministration().modify(actor, command, correlationId);
             ctx.getLogger().info("event=kpi_validator_assignment_modified actorTenant=" + actor.tenantId()

@@ -15,8 +15,6 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         SubmitOeeValidationUseCase, GetOeeValidationUseCase, SubmitStopTimeValidationUseCase, GetStopTimeValidationUseCase,
         SubmitMassPerformanceValidationUseCase, GetMassPerformanceValidationUseCase, AdministerValidatorAssignmentsUseCase {
 
-    private static final String DATE_POLICY_WARNING_CODE = "OEE_TEMPORAL_AUTHORITY_PROVISIONAL";
-
     private final AccessScopePort accessScope;
     private final OperationalContextPort context;
     private final ValidatorAssignmentPort validatorAssignments;
@@ -134,7 +132,6 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
             issues.add(ValidationIssue.blocker("ONLY_PREVIOUS_DAY_ALLOWED",
                     "Only D-1 in the plant-local calendar is eligible. Weekends and holidays are not skipped; refresh temporal-context when the plant crosses midnight"));
         }
-        addDatePolicyWarning(issues);
 
         boolean eligible = issues.stream().noneMatch(i -> i.severity() == Severity.BLOCKER);
         return result(eligible, plantId, lineId, businessDate, expected, plant.get().timezoneName(), issues);
@@ -177,7 +174,6 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         }
         ZonedDateTime plantNow = ZonedDateTime.now(clock.withZone(zone));
         LocalDate eligibleDate = businessDatePolicy.editableBusinessDate(plant.get(), clock);
-        addDatePolicyWarning(issues);
         return temporalResult(plantId, lineId, plant.get(), plantNow, eligibleDate, issues);
     }
 
@@ -207,8 +203,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 false,
                 true,
                 "SERVER_RECALCULATES_D_MINUS_1_AND_REJECTS_STALE_DATE",
-                "PENDING_FUNCTIONAL_DEFINITION",
-                "PROVISIONAL_PLANT_TIMEZONE",
+                "RESOLVED_AS_PREVIOUS_LOCAL_CALENDAR_DAY",
+                "AUTHORITATIVE_CORE_PLANT_TIMEZONE",
                 List.copyOf(issues));
     }
 
@@ -226,11 +222,6 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                     "Plant timezone_name is not a valid IANA timezone and D-1 cannot be calculated safely"));
             return null;
         }
-    }
-
-    private void addDatePolicyWarning(List<ValidationIssue> issues) {
-        issues.add(ValidationIssue.warning(DATE_POLICY_WARNING_CODE,
-                "Spec 03 confirms calendar D-1 and explicitly includes weekends/holidays. The official OEE cutoff, elapsed-24-hour interpretation and final timezone authority remain open; until defined, the server uses core.plant.timezone_name and never consults a business-day/holiday calendar"));
     }
 
     private void validateModuleEntitlement(ActorContext actor, List<ValidationIssue> issues) {
@@ -345,7 +336,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "CURRENT_GENERIC_USER_PLANT_ACCESS_REQUIRED",
                 "EXTERNAL_GLOBAL_SUPPLY_CHAIN_APPROVAL",
                 canonical ? (validatorAssignmentAdministration.available() ? "IN_MICROSERVICE_CANONICAL_ADMIN_API" : "PENDING_ADMIN_CAPABILITY_REFERENCE_DATA") : "LOCAL_FIXTURE_CONFIGURATION",
-                canonical ? "OPTIONAL_VALID_TO_NULL_MEANS_INDEFINITE" : "CONFIGURATION_LIFETIME",
+                canonical ? "INDEFINITE_UNTIL_EXPLICIT_REVOCATION" : "CONFIGURATION_LIFETIME",
                 "MULTIPLE_PLANTS_SUPPORTED_NO_GLOBAL_LIMIT",
                 canonical
                         ? "TRANSACTIONAL_WRITE_TIME_LIMIT_WITH_PLANT_ADVISORY_LOCK"
@@ -354,7 +345,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 canonical
                         ? "CANONICAL_HISTORY_PLUS_AUDIT_CHANGE_LOG_ACTOR_CORRELATION_AND_REASON"
                         : "NO_PERSISTENT_ASSIGNMENT_AUDIT",
-                "PENDING_BUSINESS_DEFINITION_VALIDATIONS_REMAIN_PERSISTED",
+                "PENDING_VALIDATIONS_REMAIN_PERSISTED_AND_IMMUTABLE_AFTER_ACCESS_REVOCATION",
                 canonical
                         ? "TRANSACTIONALLY_SERIALIZED_BY_PLANT_ADVISORY_LOCK"
                         : "STARTUP_CONFIGURATION_VALIDATION");
@@ -374,7 +365,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         if (command.targetUserId() <= 0) throw new IllegalArgumentException("targetUserId must be positive");
         if (command.externalApprovalReference() == null || command.externalApprovalReference().isBlank())
             throw new IllegalArgumentException("externalApprovalReference is required because Direction Global approval remains external");
-        return validatorAssignmentAdministration.assign(actorUserId, command.targetUserId(), command.plantId(), command.validTo(),
+        return validatorAssignmentAdministration.assign(actorUserId, command.targetUserId(), command.plantId(),
                 command.externalApprovalReference(), command.reason(), correlationId);
     }
 
@@ -385,7 +376,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         if (command.targetUserId() <= 0) throw new IllegalArgumentException("targetUserId must be positive");
         if (command.externalApprovalReference() == null || command.externalApprovalReference().isBlank())
             throw new IllegalArgumentException("externalApprovalReference is required for assignment modification");
-        return validatorAssignmentAdministration.modify(actorUserId, command.targetUserId(), command.plantId(), command.validTo(),
+        return validatorAssignmentAdministration.modify(actorUserId, command.targetUserId(), command.plantId(),
                 command.externalApprovalReference(), command.reason(), correlationId);
     }
 
@@ -1022,8 +1013,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 ValidationWorkflowStatus.PENDING.name(),
                 "KPI_RESULT_ID",
                 validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION" : "UNAVAILABLE",
-                "IMPLEMENTED_SERVICE_TRANSACTION_GUARD_DB_UNIQUE_RECOMMENDED",
-                "IMPLEMENTED_POSTGRES_ADVISORY_LOCK",
+                "IMPLEMENTED_TRANSACTIONAL_ONE_OPPORTUNITY_PER_KPI_RESULT",
+                "IMPLEMENTED_POSTGRES_ADVISORY_LOCK_AND_RECHECK",
                 "APPROVAL_MODULE_OWNS_APPROVE_REJECT_AND_EFFECTIVE_APPLICATION");
     }
 
@@ -1087,9 +1078,9 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                                 : "Assignment administration is external"),
                 new CapabilityView("assignmentPolicyContract", "IMPLEMENTED_SPEC_02",
                         "Spec 02 supports policy, self-scope, admin list, assign, modify and revoke; external approval remains outside GBC but its reference is mandatory on assign/modify"),
-                new CapabilityView("pendingValidationOnRevocation", "PENDING_DEFINITION",
-                        "Spec 02 leaves behavior for pending validations undefined"),
-                new CapabilityView("previousDayRule", "IMPLEMENTED_PROVISIONAL",
+                new CapabilityView("pendingValidationOnRevocation", "CLOSED_KEEP_PENDING_IMMUTABLE",
+                        "Revocation blocks future access but does not cancel, reassign or mutate already persisted PENDING validations; Approval KPI retains the historical proposal"),
+                new CapabilityView("previousDayRule", "IMPLEMENTED",
                         "Exactly the previous local calendar date; weekends and holidays are not skipped"),
                 new CapabilityView("temporalContext", "IMPLEMENTED_SPEC_03",
                         "Server exposes plant-local current date/time, the single eligible KPI business date, the current D-1 window expiry at next local midnight, and mandatory revalidation-on-submit semantics"),
@@ -1097,10 +1088,10 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "No business-day calendar is applied; D-1 remains eligible on weekends and holidays"),
                 new CapabilityView("serverSideDateRevalidation", "IMPLEMENTED",
                         "Eligibility is recalculated on each request/prevalidation so stale URLs/screens cannot bypass D-1; temporal-context exposes the next local-midnight expiry for frontend refresh"),
-                new CapabilityView("oeeDayCutoffAnd24HourSemantics", "PENDING_DEFINITION",
-                        "Spec 03 leaves exact 24-hour/OEE-cutoff interpretation open"),
-                new CapabilityView("authoritativeTimezone", "IMPLEMENTED_PROVISIONAL",
-                        "Uses core.plant.timezone_name until the authoritative timezone rule is confirmed; invalid/blank timezone configuration is blocked safely"),
+                new CapabilityView("oeeDayCutoffAnd24HourSemantics", "CLOSED_AS_CALENDAR_D_MINUS_1",
+                        "Validation uses the previous plant-local calendar day (00:00 to next 00:00); it is not an elapsed-24-hour rolling window"),
+                new CapabilityView("authoritativeTimezone", "IMPLEMENTED_CANONICAL",
+                        "core.plant.timezone_name is the authoritative timezone for D-1 and plant-local approval deadline calculations; invalid/blank configuration is blocked safely"),
                 new CapabilityView("reasonValidation", "IMPLEMENTED_SPEC_06",
                         "Only SYSTEM/OPERATIVE are accepted; SYSTEM requires incidentNumber, OPERATIVE requires cause/action plan, text is normalized and stale fields from a changed reason are discarded"),
                 new CapabilityView("justificationPersistence", validationPersistence.available() ? "IMPLEMENTED_CANONICAL" : "UNAVAILABLE",
@@ -1157,13 +1148,17 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 new CapabilityView("persistedAuditReconciliation", "IMPLEMENTED_FOR_OEE_AND_STOP_VALIDATION",
                         "Persisted OEE/stop validation detail exposes canonical user id, immutable Entra tenant/object ids from app_security.user_identity, and proposed_at; exact historical name/email snapshots are not representable in the current schema"),
                 new CapabilityView("oeeOriginalValueSource", "IMPLEMENTED_READ_ONLY_V1_2",
-                        "Reads the latest canonical kpi.kpi_result for the requested kpi_definition.kpi_code when its line-level period exactly matches the provisional local D-1 window"),
+                        "Reads the latest canonical kpi.kpi_result for the requested kpi_definition.kpi_code when its line-level period exactly matches the authoritative plant-local D-1 calendar window"),
                 new CapabilityView("validationWorkflowContract", "IMPLEMENTED_CANONICAL",
                         "Canonical statuses are PENDING, APPROVED, REJECTED and EXPIRED; new proposals are persisted as PENDING"),
                 new CapabilityView("proposalPersistence", validationPersistence.available() ? "IMPLEMENTED_CANONICAL" : "UNAVAILABLE",
                         "Persists kpi.kpi_validation and kpi.kpi_validation_detail atomically"),
-                new CapabilityView("singleModificationPerDatum", "IMPLEMENTED_SERVICE_GUARD",
-                        "Uses kpi_result_id identity, transactional advisory lock and existing-detail check; a DB UNIQUE constraint is still recommended"),
+                new CapabilityView("singleModificationPerDatum", "IMPLEMENTED_TRANSACTIONAL",
+                        "Uses kpi_result_id as the datum identity and serializes submissions with a transactional advisory lock plus existing-detail re-check; this micro is the authoritative validation writer"),
+                new CapabilityView("sourceChangeAfterProposal", "CLOSED_SNAPSHOT_SEMANTICS",
+                        "The persisted original_value is immutable proposal evidence. Later kpi_result recalculation does not mutate or rebase an existing proposal; Approval KPI decides using the stored proposal evidence"),
+                new CapabilityView("approvalDeadline", "CLOSED_PLANT_LOCAL_PROPOSAL_DAY_END",
+                        "expires_at is the final second of the plant-local calendar day on which the proposal is created, preserving a valid approval window for D-1 proposals"),
                 new CapabilityView("approvalWorkflow", "PENDING_DEPENDENCY",
                         "KPI Approval remains the second-stage dependency")
         );

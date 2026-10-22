@@ -1,4 +1,9 @@
 
+## Spec 02 closure
+- Closed validator assignments as indefinite until explicit revocation; removed programmable `validTo` from assignment APIs.
+- Closed pending-validation behavior: revocation removes future access only; existing `PENDING` proposals remain immutable and continue to Approval KPI.
+- Confirmed multi-plant assignments with no global user limit and retained the transactional max-two-per-plant guard.
+
 ## Spec 05 - canonical-schema correction
 
 - Removed the assumption of `kpi.kpi_validation_mass_detail`; no non-canonical table is required.

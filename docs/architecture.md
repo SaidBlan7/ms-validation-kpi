@@ -22,7 +22,7 @@ Specs 01-05 are aligned/reviewed against the physical v1.2 DDL for their current
 - `kpi.kpi_definition`
 - `kpi.kpi_result`
 
-The canonical OEE original-value adapter is read-only and accepts only a line-level result whose period exactly matches the current provisional plant-local D-1 window. It intentionally does not aggregate shift/product/execution rows or infer a different OEE cutoff.
+The canonical OEE original-value adapter is read-only and accepts only a line-level result whose period exactly matches the authoritative plant-local D-1 calendar window. It intentionally does not aggregate shift/product/execution rows or infer a different OEE cutoff.
 
 Specs 04-05 are also migrated to physical v1.2. Spec 04 reads the canonical stops model. Spec 05 prefers line-level `telemetry.derived_metric` and can use an explicitly provisional scheduling fallback from `scheduling.batch_execution` / `scheduling.finished_product_output`. Health uses `SELECT 1`. No canonical operational/KPI rows are mutated.
 
@@ -38,7 +38,7 @@ The service checks the Spec 01 maximum of two active validators on each plant-sc
 
 The workflow vocabulary mirrors canonical `kpi.kpi_validation.status_code`: `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`. `kpi_result_id` is the source identity. The service uses a PostgreSQL advisory transaction lock plus an existence check to serialize concurrent proposals; a physical UNIQUE constraint is still recommended to protect against external writers.
 
-Spec 03 uses `core.plant.timezone_name` as the current provisional authority and implements the explicit D-1 calendar rule from the specification. Temporal context includes the next local-midnight expiry of the current D-1 selection and server-side revalidation is mandatory on every operation. Invalid timezone configuration is returned as a controlled blocker. Exact elapsed-24-hour/OEE-cutoff semantics remain a functional dependency rather than being inferred.
+Spec 03 uses `core.plant.timezone_name` as the authoritative timezone confirmed by Data. The temporal contract is closed as D-1 calendar (00:00–00:00 local), weekends/holidays included, not a rolling elapsed-24-hour window. Temporal context includes the next local-midnight expiry of the current D-1 selection and server-side revalidation is mandatory on every operation. Invalid timezone configuration is returned as a controlled blocker.
 
 ## Specs 04-07 reference semantics
 

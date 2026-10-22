@@ -129,7 +129,9 @@ class OeeValidationServiceTest {
         assertEquals(LocalDate.of(2026, 10, 8), context.eligibleBusinessDate());
         assertEquals("SINGLE_DATE_ONLY", context.dateSelectionMode());
         assertEquals("PREVIOUS_LOCAL_CALENDAR_DAY", context.calendarRule());
-        assertEquals("PROVISIONAL_PLANT_TIMEZONE", context.timezoneAuthorityStatus());
+        assertEquals("RESOLVED_AS_PREVIOUS_LOCAL_CALENDAR_DAY", context.elapsed24HourRuleStatus());
+        assertEquals("AUTHORITATIVE_CORE_PLANT_TIMEZONE", context.timezoneAuthorityStatus());
+        assertTrue(context.issues().stream().noneMatch(i -> "OEE_TEMPORAL_AUTHORITY_PROVISIONAL".equals(i.code())));
     }
 
     @Test

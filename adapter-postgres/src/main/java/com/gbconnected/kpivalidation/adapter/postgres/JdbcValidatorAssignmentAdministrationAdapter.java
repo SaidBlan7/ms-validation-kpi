@@ -85,16 +85,16 @@ public final class JdbcValidatorAssignmentAdministrationAdapter implements Valid
     }
 
     @Override
-    public ValidatorAssignmentChangeResult assign(long actorUserId, long targetUserId, long plantId, Instant validTo,
+    public ValidatorAssignmentChangeResult assign(long actorUserId, long targetUserId, long plantId,
             String externalApprovalReference, String reason, String correlationId) {
-        return write("ASSIGNED", actorUserId, targetUserId, plantId, validTo, externalApprovalReference, reason,
+        return write("ASSIGNED", actorUserId, targetUserId, plantId, null, externalApprovalReference, reason,
                 correlationId, false, false);
     }
 
     @Override
-    public ValidatorAssignmentChangeResult modify(long actorUserId, long targetUserId, long plantId, Instant validTo,
+    public ValidatorAssignmentChangeResult modify(long actorUserId, long targetUserId, long plantId,
             String externalApprovalReference, String reason, String correlationId) {
-        return write("MODIFIED", actorUserId, targetUserId, plantId, validTo, externalApprovalReference, reason,
+        return write("MODIFIED", actorUserId, targetUserId, plantId, null, externalApprovalReference, reason,
                 correlationId, true, false);
     }
 
@@ -128,9 +128,6 @@ public final class JdbcValidatorAssignmentAdministrationAdapter implements Valid
 
                 Timestamp effectiveValidTo = validTo == null ? null : Timestamp.from(validTo);
                 Instant now = Instant.now();
-                if (!revoke && validTo != null && !validTo.isAfter(now)) {
-                    throw new IllegalArgumentException("validTo must be in the future when supplied");
-                }
 
                 long changedAssignmentId;
                 if (assignmentId == null) {

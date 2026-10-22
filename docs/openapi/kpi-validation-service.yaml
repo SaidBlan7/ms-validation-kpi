@@ -34,7 +34,7 @@ paths:
   /api/v1/oee-validation/assignments/policy:
     get:
       summary: Returns the Spec 02 KPI OEE validator assignment policy
-      description: Declares validator role/capability plus the administration capability, plant-specific scope, max two effective validators, external approval evidence, optional valid_to expiry, multi-plant support, transactional concurrency control and revocation semantics.
+      description: Declares validator role/capability plus the administration capability, plant-specific scope, max two effective validators, external approval evidence, indefinite validity until explicit revocation, multi-plant support, transactional concurrency control and revocation semantics.
       responses:
         '200': { description: Validator assignment policy }
         '401': { description: Authentication required }
@@ -69,7 +69,6 @@ paths:
               properties:
                 targetUserId: { type: integer, format: int64 }
                 plantId: { type: integer, format: int64 }
-                validTo: { type: string, format: date-time, nullable: true }
                 externalApprovalReference: { type: string }
                 reason: { type: string }
       responses:
@@ -80,7 +79,7 @@ paths:
         '409': { description: Duplicate assignment, missing generic plant access, or plant already has two validators }
   /api/v1/oee-validation/assignments/{targetUserId}/plants/{plantId}:
     patch:
-      summary: Modifies validity/evidence for an effective KPI OEE plant assignment
+      summary: Modifies approval evidence/reason for an effective KPI OEE plant assignment
       parameters:
         - { in: path, name: targetUserId, required: true, schema: { type: integer, format: int64 } }
         - { in: path, name: plantId, required: true, schema: { type: integer, format: int64 } }
@@ -92,7 +91,6 @@ paths:
               type: object
               required: [externalApprovalReference]
               properties:
-                validTo: { type: string, format: date-time, nullable: true }
                 externalApprovalReference: { type: string }
                 reason: { type: string }
       responses:
@@ -102,7 +100,7 @@ paths:
   /api/v1/oee-validation/assignments/{targetUserId}/plants/{plantId}/revoke:
     post:
       summary: Revokes an effective KPI OEE plant assignment
-      description: Closes user_role_assignment.valid_to at the current instant. Existing PENDING KPI validations are intentionally left unchanged because Spec 02 leaves that behavior undefined.
+      description: Closes user_role_assignment.valid_to at the current instant. Existing PENDING KPI validations remain persisted and immutable; revocation only removes future validator access.
       parameters:
         - { in: path, name: targetUserId, required: true, schema: { type: integer, format: int64 } }
         - { in: path, name: plantId, required: true, schema: { type: integer, format: int64 } }
@@ -122,7 +120,7 @@ paths:
   /api/v1/oee-validation/temporal-context:
     get:
       summary: Returns the server-authoritative temporal context for KPI OEE validation
-      description: Returns plant-local current date/time, the only editable business date (calendar D-1), and the local window in which that D-1 remains current. Weekends and holidays are never skipped and no business-day calendar is consulted. eligibilityWindowEndsAtExclusive is the next plant-local midnight; the server recalculates D-1 on every protected read/prevalidation and again before persistence, so a screen or saved URL that crosses midnight becomes stale. Elapsed-24-hour/OEE-cutoff semantics and final timezone authority remain explicitly pending.
+      description: Returns plant-local current date/time, the only editable business date (calendar D-1), and the local window in which that D-1 remains current. Weekends and holidays are never skipped and no business-day calendar is consulted. eligibilityWindowEndsAtExclusive is the next plant-local midnight; the server recalculates D-1 on every protected read/prevalidation and again before persistence, so a screen or saved URL that crosses midnight becomes stale. The temporal rule is closed as plant-local calendar D-1 (00:00 to 00:00) using core.plant.timezone_name; it is not a rolling elapsed-24-hour window.
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
         - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
@@ -146,7 +144,7 @@ paths:
   /api/v1/oee-validation/oee/reference:
     get:
       summary: Returns the canonical previous-day line-level KPI result used as the original value
-      description: Resolves metricCode as kpi.kpi_definition.kpi_code and reads the latest kpi.kpi_result whose plant/line match, optional shift/product/execution dimensions are null, and period_start/period_end exactly match the provisional plant-local D-1 window. No OEE code or aggregation fallback is inferred.
+      description: Resolves metricCode as kpi.kpi_definition.kpi_code and reads the latest kpi.kpi_result whose plant/line match, optional shift/product/execution dimensions are null, and period_start/period_end exactly match the authoritative plant-local D-1 calendar window. No OEE code or aggregation fallback is inferred.
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
         - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
@@ -185,7 +183,7 @@ paths:
   /api/v1/oee-validation/validations:
     post:
       summary: Creates the Spec 01 OEE validation proposal
-      description: Revalidates all Spec 01 rules server-side and atomically persists kpi.kpi_validation plus kpi.kpi_validation_detail as PENDING. Concurrent submissions for the same kpi_result_id are serialized with a PostgreSQL advisory transaction lock.
+      description: Revalidates all Spec 01 rules server-side and atomically persists kpi.kpi_validation plus kpi.kpi_validation_detail as PENDING. Concurrent submissions for the same kpi_result_id are serialized with a PostgreSQL advisory transaction lock and re-check, enforcing one proposal opportunity per canonical KPI result through this service. The stored original_value is the immutable evidence snapshot even if the source KPI is recalculated later. expires_at is the end of the plant-local proposal day.
       requestBody:
         required: true
         content:

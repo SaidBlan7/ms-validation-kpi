@@ -133,7 +133,7 @@ public class OeeValidationController {
             @Valid @RequestBody ValidatorAssignmentHttpRequest request) {
         ActorContext actor = RequestActorContextResolver.resolve(jwt);
         ValidatorAssignmentChangeResult result = validatorAssignmentAdministration.assign(actor,
-                new AssignValidatorCommand(request.targetUserId(), request.plantId(), request.validTo(),
+                new AssignValidatorCommand(request.targetUserId(), request.plantId(),
                         request.externalApprovalReference(), request.reason()), correlationId());
         LOG.info("event=kpi_validator_assignment_created actorTenant={} actorObject={} targetUserId={} plantId={} correlationId={} result=OK",
                 actor.tenantId(), actor.objectId(), request.targetUserId(), request.plantId(), correlationId());
@@ -146,7 +146,7 @@ public class OeeValidationController {
             @Valid @RequestBody ValidatorAssignmentModifyHttpRequest request) {
         ActorContext actor = RequestActorContextResolver.resolve(jwt);
         ValidatorAssignmentChangeResult result = validatorAssignmentAdministration.modify(actor, new ModifyValidatorAssignmentCommand(targetUserId, plantId,
-                request.validTo(), request.externalApprovalReference(), request.reason()), correlationId());
+                request.externalApprovalReference(), request.reason()), correlationId());
         LOG.info("event=kpi_validator_assignment_modified actorTenant={} actorObject={} targetUserId={} plantId={} correlationId={} result=OK",
                 actor.tenantId(), actor.objectId(), targetUserId, plantId, correlationId());
         return result;
@@ -379,4 +379,3 @@ public class OeeValidationController {
         return value == null ? "" : value;
     }
 }
-
