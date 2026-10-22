@@ -221,14 +221,14 @@ paths:
   /api/v1/oee-validation/stop-times/policy:
     get:
       summary: Returns the current Spec 04 stop-time validation policy
-      description: Declares the canonical source, aggregate identity, canonical oee_stop_type_code classification, historical inactive-classification handling, server-side original reconciliation, persistence state, and rules still pending functional definition.
+      description: Declares the canonical source, aggregate identity, canonical oee_stop_type_code classification, historical inactive-classification handling, server-side original reconciliation, one-classification-per-validation closure policy, persistence state, and the still-open cross-classification total-time formula.
       responses:
         '200': { description: Stop-time policy }
         '401': { description: Authentication required }
   /api/v1/oee-validation/stop-times/reference:
     get:
       summary: Returns D-1 stop-time totals grouped by canonical v1.2 stop classification
-      description: Read-only reconstruction from stops.stop_event + stops.stop_fragment clipped to the selected D-1 window. Each event is grouped by its latest stops.classification_history row. Observed classifications remain visible even if currently inactive. programmingType comes from canonical stops.stop_classification.oee_stop_type_code.
+      description: Reconstruction from stops.stop_event + stops.stop_fragment clipped to the selected D-1 window and classified through stops.classification_history. Observed classifications remain visible even if currently inactive. programmingType comes from canonical stops.stop_classification.oee_stop_type_code; only PROGRAMMED/UNPROGRAMMED classifications are editable in Spec 04.
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
         - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
@@ -241,7 +241,7 @@ paths:
   /api/v1/oee-validation/stop-times/prevalidate:
     post:
       summary: Prevalidates one Spec 04 stop-time correction
-      description: Revalidates D-1/security/classification scope, reloads the canonical line/date/classification aggregate, blocks stale/manipulated originalSeconds, rejects negative or unchanged values, validates justification, checks the one-opportunity rule, and returns readiness for durable PENDING submission.
+      description: Revalidates D-1/security/classification scope, reloads the canonical line/date/classification aggregate, requires canonical oee_stop_type_code PROGRAMMED or UNPROGRAMMED, blocks stale/manipulated originalSeconds, rejects negative or unchanged values, validates justification, checks the one-opportunity rule, and returns readiness for durable PENDING submission. Each request represents exactly one classification correction.
       requestBody:
         required: true
         content:
@@ -268,7 +268,7 @@ paths:
   /api/v1/oee-validation/stop-times/validations:
     post:
       summary: Creates one Spec 04 stop-time validation proposal
-      description: Revalidates the complete Spec 04 request server-side and atomically persists kpi.kpi_validation plus kpi.kpi_validation_detail with stop_classification_id as PENDING. Concurrent submissions for the same line/date/classification are serialized by PostgreSQL advisory lock.
+      description: Revalidates the complete Spec 04 request server-side and atomically persists one classification correction as kpi.kpi_validation plus kpi.kpi_validation_detail with stop_classification_id in PENDING. Multiple classification corrections are separate validation proposals. Concurrent submissions for the same line/date/classification are serialized by PostgreSQL advisory lock.
       requestBody:
         required: true
         content:

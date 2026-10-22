@@ -1,29 +1,30 @@
 # Spec 04 - Validación de tiempos D-1 por clasificación de paro
 
-## Implementado
+## Cerrado / implementado
 
-- Seguridad, alcance planta/línea y D-1 reutilizan las garantías de Specs 01-03.
-- Fuente canónica: `stops.stop_event`, `stops.stop_fragment`, última `stops.classification_history` y `stops.stop_classification`.
-- Los fragmentos se recortan al solapamiento con la ventana local D-1 antes de agregarlos por clasificación.
-- `GET /stop-times/reference` devuelve por clasificación el valor original en segundos, código/nombre, estado actual y trazabilidad del agregado.
-- PROGRAMMED/UNPROGRAMMED se lee directamente de `stops.stop_classification.oee_stop_type_code`; ya no existe mapping externo por environment.
-- El catálogo usa clasificaciones globales o de la organización de la planta. Las activas aparecen aunque tengan valor `0`; las inactivas se conservan cuando fueron observadas en D-1.
-- `POST /stop-times/prevalidate` vuelve a leer el agregado canónico, rechaza original obsoleto/manipulado, valores negativos, valores sin cambio y justificación inválida.
+- Seguridad, alcance planta/línea y D-1 reutilizan las garantías cerradas de Specs 01-03.
+- La fuente canónica confirmada por Data es `stops.stop_event` + `stops.stop_fragment` + la clasificación/reclasificación aplicable en `stops.classification_history` + `stops.stop_classification`.
+- No existe ni se asume una tabla de consolidado diario: el micro deriva el consolidado por línea, clasificación y periodo desde esas estructuras.
+- Los fragmentos se recortan al solapamiento con la ventana D-1 calculada con `core.plant.timezone_name` antes de agregarlos por clasificación.
+- PROGRAMMED/UNPROGRAMMED se obtiene exclusivamente de `stops.stop_classification.oee_stop_type_code`.
+- Una clasificación cuyo `oee_stop_type_code` sea distinto de `PROGRAMMED`/`UNPROGRAMMED` o sea NULL puede permanecer visible para diagnóstico, pero queda fuera del alcance editable de Spec 04 y el servidor bloquea su corrección.
+- `GET /stop-times/reference` expone por clasificación el valor original en segundos, código/nombre, vigencia, tipo OEE y trazabilidad del agregado.
+- Clasificaciones activas del ámbito global/organización se muestran aunque su valor sea cero; una clasificación actualmente inactiva se conserva cuando fue observada en D-1 para no perder reconciliación histórica.
+- `POST /stop-times/prevalidate` vuelve a leer el agregado canónico y rechaza original obsoleto/manipulado, valores negativos, valores sin cambio, clasificación fuera del scope OEE y justificación inválida.
 - La propuesta sólo puede realizarse una vez por `lineId + businessDate + stopClassificationId` dentro de este micro.
 - `POST /stop-times/validations` revalida todo en servidor y persiste una propuesta `PENDING` en `kpi.kpi_validation` + `kpi.kpi_validation_detail`, usando `stop_classification_id`, `original_value` y `proposed_value`.
-- La concurrencia para el mismo dato se serializa con advisory lock PostgreSQL y se vuelve a revisar existencia dentro de la transacción.
-- `GET /stop-times/validations/{validationId}` expone línea, fecha, clasificación, tipo OEE, valor original/propuesto, motivo, actor y timestamps para reconciliación/Aprobación KPI.
-- App Service, Azure Functions, OpenAPI y auditoría/correlation ID quedan conectados al mismo flujo.
-- No se modifica el histórico de `stops`; la corrección queda como propuesta pendiente, como exige el flujo de dos etapas.
+- La concurrencia para el mismo dato se serializa con advisory lock PostgreSQL y la existencia se vuelve a verificar dentro de la transacción.
+- `GET /stop-times/validations/{validationId}` devuelve línea, fecha, clasificación, tipo OEE, original/propuesto, justificación, actor y timestamps para reconciliación/Aprobación KPI.
+- La decisión de cierre para múltiples correcciones es **una clasificación por propuesta de validación**. Si un usuario corrige varias clasificaciones, se generan propuestas independientes. Esto conserva una oportunidad por dato, decisión de aprobación independiente y auditoría inequívoca.
+- Una clasificación observada en D-1 puede corregirse aunque después haya quedado inactiva; el estado actual no reescribe la historia del día objetivo.
+- No se modifica el histórico de `stops`; la corrección permanece como propuesta pendiente hasta Aprobación KPI.
 
-## Pendiente por definición funcional o modelo de datos
+## Único punto que permanece abierto por la propia Spec
 
-- La regla matemática exacta para validar suma máxima/consistencia entre clasificaciones sigue abierta; no se inventa una regla de 24 h.
-- La Spec no confirma si múltiples clasificaciones deben compartir una sola cabecera de validación. La implementación persiste una clasificación por validación para respetar la regla de una sola oportunidad sin inventar agrupación.
-- El modelo canónico no tiene una relación línea-clasificación; se usa el catálogo global/organización de la planta más clasificaciones históricamente observadas. Si negocio requiere aplicabilidad distinta por línea, la base o un catálogo autoritativo deberá modelarlo.
-- `oee_stop_type_code` permanece extensible en BD; Spec 04 sólo reconoce funcionalmente PROGRAMMED y UNPROGRAMMED para este flujo. Valores distintos se exponen como dato canónico pero requieren decisión funcional.
-- Approval KPI sigue siendo responsable de aprobar/rechazar y de aplicar el valor efectivo al cálculo OEE.
-- La base no impone un UNIQUE físico para `(line_id, oee_date, stop_classification_id)` a través de cabecera/detalle. El micro lo protege transaccionalmente, pero un escritor externo podría saltarse esa regla.
-## Alineación posterior
+- La regla matemática de consistencia/suma máxima entre clasificaciones no está definida. No se aplica una regla artificial de 24 horas ni otra relación entre categorías. El micro sí valida formato, signo, original vigente y unicidad; una regla agregada adicional deberá incorporarse cuando negocio publique la fórmula OEE correspondiente.
 
-- Specs 04 and 05 now both persist typed validation details under kpi_validation while keeping their domain-specific identity/lineage separate.
+## Limitaciones de integridad/modelo ya conocidas
+
+- El modelo canónico no tiene una relación explícita línea-clasificación. Para referencia se usa el catálogo global/organización y las clasificaciones efectivamente observadas en D-1. Si negocio necesitara un catálogo habilitado distinto por línea, requerirá una fuente autoritativa adicional.
+- La BD no impone un UNIQUE físico transversal para `(line_id, oee_date, stop_classification_id)` entre cabecera y detalle. El micro lo protege transaccionalmente; un escritor externo directo a BD podría omitir esa regla.
+- Aprobación KPI continúa siendo responsable de aprobar/rechazar y de hacer efectivo el valor propuesto en el cálculo.

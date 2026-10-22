@@ -501,8 +501,9 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "Times are reconstructed read-only from canonical v1.2 stops.stop_event/stop_fragment and the latest classification_history record for each stop event; the exact OEE calculation contract remains external"));
         if (hasUnmappedProgrammingType) {
             issues.add(ValidationIssue.warning("PROGRAMMING_TYPE_MAPPING_INCOMPLETE",
-                    "At least one observed stop classification has no PROGRAMMED/UNPROGRAMMED mapping. Configure "
-                            + stopTimeReference.programmingTypeConfigurationKey() + " using classification_code=PROGRAMMED|UNPROGRAMMED"));
+                    "At least one stop classification is outside the Spec 04 OEE scope because "
+                            + stopTimeReference.programmingTypeConfigurationKey()
+                            + " is not PROGRAMMED or UNPROGRAMMED. It remains visible for diagnosis but cannot be corrected in this flow."));
         }
         issues.add(ValidationIssue.warning("LINE_CLASSIFICATION_APPLICABILITY_FALLBACK",
                 "The canonical model has no line-to-stop-classification relation; active global/plant-organization classifications are exposed as the available catalog (including zero values), and currently inactive classifications are retained only when observed in D-1"));
@@ -558,9 +559,10 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "The classification was observed in the selected D-1 data but is currently inactive; it remains visible/prevalidatable for historical reconciliation"));
             }
             if (observed.programmingType() == null) {
-                issues.add(ValidationIssue.warning("PROGRAMMING_TYPE_MAPPING_MISSING_FOR_CLASSIFICATION",
-                        "The selected classification has no PROGRAMMED/UNPROGRAMMED mapping in "
-                                + stopTimeReference.programmingTypeConfigurationKey()));
+                issues.add(ValidationIssue.blocker("STOP_CLASSIFICATION_NOT_OEE_PROGRAMMED_OR_UNPROGRAMMED",
+                        "The selected classification cannot be corrected in Spec 04 because "
+                                + stopTimeReference.programmingTypeConfigurationKey()
+                                + " is not PROGRAMMED or UNPROGRAMMED"));
             }
         }
 
@@ -583,8 +585,10 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
 
         issues.add(ValidationIssue.warning("TOTAL_TIME_RULE_PENDING_DEFINITION",
                 "No 24-hour or cross-classification sum rule is applied because Spec 04 explicitly leaves the exact mathematical consistency rule undefined"));
-        issues.add(ValidationIssue.warning("MULTI_CLASSIFICATION_VALIDATION_PENDING_DEFINITION",
-                "One classification is persisted per validation until the workflow owner defines whether multiple classification changes belong to one validation header"));
+        // Closure decision for Spec 04: one corrected classification is one immutable validation proposal.
+        // Multiple corrections are represented by multiple proposal headers so each value keeps its own
+        // one-opportunity rule, approval decision and audit trail.
+
 
         boolean valid = issues.stream().noneMatch(i -> i.severity() == Severity.BLOCKER);
         return new StopTimeCorrectionPrevalidationResult(valid, valid && validationPersistence.available(), command.plantId(), command.lineId(),
@@ -613,8 +617,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 List.of("PROGRAMMED", "UNPROGRAMMED"),
                 "ACTIVE_PLANT_ORGANIZATION_OR_GLOBAL_CATALOG_PLUS_OBSERVED_INACTIVE_D_MINUS_1",
                 "SERVER_REVALIDATES_CANONICAL_AGGREGATE_AND_REJECTS_STALE_ORIGINAL",
-                "PENDING_FUNCTIONAL_DEFINITION",
-                "ONE_CLASSIFICATION_PER_PREVALIDATION_PENDING_WORKFLOW_GROUPING_DEFINITION",
+                "OPEN_BY_SPEC_04_NO_24H_ASSUMPTION",
+                "ONE_CLASSIFICATION_PER_VALIDATION",
                 ValidationWorkflowStatus.PENDING.name(),
                 validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION_DETAIL_STOP_CLASSIFICATION" : "UNAVAILABLE");
     }
@@ -1114,16 +1118,16 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Spec 04 prevalidation rejects missing or negative original/proposed stop-time seconds; zero is valid when observed"),
                 new CapabilityView("stopClassificationCatalogValidation", "IMPLEMENTED_CANONICAL_SCOPE_FALLBACK",
                         "stopClassificationId is validated against stops.stop_classification and plant organization/global scope; active scoped classifications are exposed with zero when not observed because v1.2 has no line-specific relation"),
-                new CapabilityView("programmedUnprogrammedClassification", "IMPLEMENTED_CANONICAL",
-                        "PROGRAMMED/UNPROGRAMMED is read from stops.stop_classification.oee_stop_type_code; no external code/name mapping is required"),
+                new CapabilityView("programmedUnprogrammedClassification", "IMPLEMENTED_CANONICAL_CLOSED",
+                        "PROGRAMMED/UNPROGRAMMED is read from stops.stop_classification.oee_stop_type_code; classifications with any other/null value are visible for diagnosis but blocked from Spec 04 correction"),
                 new CapabilityView("inactiveStopClassificationHistory", "IMPLEMENTED_PROVISIONAL",
                         "A classification observed in D-1 remains visible/prevalidatable even when currently inactive so historical reconciliation does not disappear"),
                 new CapabilityView("stopTimeTotalConsistency", "PENDING_FUNCTIONAL_DEFINITION",
                         "Spec 04 explicitly leaves the mathematical maximum/sum rule undefined; no 24-hour rule is inherited"),
                 new CapabilityView("stopTimeValidationPersistence", validationPersistence.available() ? "IMPLEMENTED_CANONICAL" : "UNAVAILABLE",
                         "Spec 04 proposals persist as PENDING using kpi.kpi_validation_detail.stop_classification_id with original/proposed values and transactional one-opportunity protection"),
-                new CapabilityView("multiClassificationValidation", "IMPLEMENTED_CONSERVATIVE_PENDING_GROUPING_DEFINITION",
-                        "Spec 04 leaves grouping open; the service persists one classification per validation header until business defines multi-detail grouping"),
+                new CapabilityView("multiClassificationValidation", "CLOSED_ONE_CLASSIFICATION_PER_VALIDATION",
+                        "Closure decision: each line/date/classification correction is its own immutable validation proposal; correcting several classifications creates several independent proposals"),
                 new CapabilityView("massPerformanceReference", "IMPLEMENTED_CANONICAL_V1_2",
                         "Spec 05 prefers exact line-level telemetry.derived_metric values by semantic metric code and falls back per variable to canonical scheduling data when configured AUTO and no derived metric exists"),
                 new CapabilityView("massPerformanceOriginalReconciliation", "IMPLEMENTED",

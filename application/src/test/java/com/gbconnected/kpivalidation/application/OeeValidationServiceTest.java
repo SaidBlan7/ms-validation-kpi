@@ -241,11 +241,12 @@ class OeeValidationServiceTest {
     }
 
     @Test
-    void stopTimePolicyMakesOpenSpec04RulesExplicit() {
+    void stopTimePolicyReflectsClosedSpec04WorkflowDecisions() {
         var policy = service(true).getStopTimePolicy();
         assertEquals("LINE_DATE_STOP_CLASSIFICATION_AGGREGATE", policy.sourceIdentityStrategy());
         assertEquals(List.of("PROGRAMMED", "UNPROGRAMMED"), policy.supportedProgrammingTypes());
-        assertEquals("PENDING_FUNCTIONAL_DEFINITION", policy.totalConsistencyPolicy());
+        assertEquals("OPEN_BY_SPEC_04_NO_24H_ASSUMPTION", policy.totalConsistencyPolicy());
+        assertEquals("ONE_CLASSIFICATION_PER_VALIDATION", policy.multiClassificationPolicy());
         assertEquals("PENDING", policy.targetStatusIfPersisted());
     }
 

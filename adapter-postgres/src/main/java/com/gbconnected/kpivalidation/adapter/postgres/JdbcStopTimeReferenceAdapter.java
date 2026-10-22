@@ -183,7 +183,7 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
     private static String normalizeProgrammingType(String value) {
         if (value == null || value.isBlank()) return null;
         String normalized = value.trim().toUpperCase(Locale.ROOT);
-        return Set.of("PROGRAMMED", "UNPROGRAMMED").contains(normalized) ? normalized : normalized;
+        return Set.of("PROGRAMMED", "UNPROGRAMMED").contains(normalized) ? normalized : null;
     }
 
     private static String aggregateKey(long lineId, LocalDate businessDate, long classificationId) {

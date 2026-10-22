@@ -159,8 +159,10 @@ mvn -pl runtime-functions -am azure-functions:run
 - `GET /api/v1/oee-validation/stop-times/validations/{validationId}`: devuelve trazabilidad completa para reconciliación/aprobación.
 - PROGRAMMED/UNPROGRAMMED proviene directamente de `stops.stop_classification.oee_stop_type_code`; no se requiere mapping externo.
 - Una clasificación observada en D-1 permanece reconciliable aunque actualmente esté inactiva.
+- Sólo `PROGRAMMED` y `UNPROGRAMMED` son editables; otros/null `oee_stop_type_code` quedan visibles para diagnóstico pero bloqueados para corrección.
+- Cierre de agrupación: una clasificación corregida = una propuesta de validación independiente. Varias clasificaciones generan varias propuestas.
 
-La regla de suma total, una eventual aplicabilidad distinta por línea, agrupación de múltiples correcciones y persistencia/aprobación siguen pendientes de definición o del contrato de Validación KPI. Ver `docs/spec-04-status.md`.
+El único punto funcional de Spec 04 que permanece abierto es la fórmula exacta de consistencia/suma total entre clasificaciones; no se hereda una regla de 24 h sin evidencia. Ver `docs/spec-04-status.md`.
 
 ## Spec 05 - masas elaboradas y entregadas
 

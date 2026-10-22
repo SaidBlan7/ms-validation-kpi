@@ -29,7 +29,7 @@ Spec 05 prevalidation re-reads the canonical/provisional source. A stale/manipul
 
 - Validation KPI proposal persistence / status history (Specs 01, 04, 05).
 - Approval KPI and final application semantics.
-- Spec 04 total-time mathematics, multi-classification grouping and optional line-to-classification applicability if negocio requires it.
+- Spec 04 exact cross-classification total-time mathematics remains open by specification; one-classification-per-validation is now the closed workflow decision. A future line-specific applicability catalog is only needed if negocio requires behavior stricter than the current canonical organization/global + observed-D-1 source.
 - Spec 05 official mass metric codes or confirmation of the scheduling fallback semantics, special performance rules, relationship between elaborated/delivered values, final precision/rounding and precedence for automatic data arriving after durable proposal creation.
 
 ## Validation performed in this review
