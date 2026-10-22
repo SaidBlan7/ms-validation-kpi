@@ -1,4 +1,14 @@
 
+# Spec 03 — cierre definitivo
+
+- Se verificó el ZIP integrado y la implementación temporal ya estaba alineada con la definición cerrada.
+- La única fecha editable permanece como D-1 calendario en `core.plant.timezone_name`; no se interpreta como ventana móvil de 24 horas.
+- Fines de semana y festivos no se omiten ni requieren calendario laboral.
+- `temporal-context`, `eligibility`, referencias, prevalidaciones y persistencias protegidas recalculan la fecha en servidor; una pantalla o URL que cruza medianoche queda obsoleta y se rechaza al guardar.
+- No fue necesario modificar lógica de Specs 01 o 02: ambas ya consumen la misma política temporal y respetan la revocación/asignación específica por planta.
+- Se eliminó de `FINAL-REVIEW-NOTES.md` el pendiente obsoleto que todavía presentaba timezone/semántica de 24 horas como abiertos.
+
+
 ## Spec 02 closure
 - Closed validator assignments as indefinite until explicit revocation; removed programmable `validTo` from assignment APIs.
 - Closed pending-validation behavior: revocation removes future access only; existing `PENDING` proposals remain immutable and continue to Approval KPI.

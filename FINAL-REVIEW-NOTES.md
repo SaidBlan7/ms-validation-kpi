@@ -29,7 +29,6 @@ Spec 05 prevalidation re-reads the canonical/provisional source. A stale/manipul
 
 - Validation KPI proposal persistence / status history (Specs 01, 04, 05).
 - Approval KPI and final application semantics.
-- Spec 03 final elapsed-24-hour/OEE-cutoff and authoritative timezone rule.
 - Spec 04 total-time mathematics, multi-classification grouping and optional line-to-classification applicability if negocio requires it.
 - Spec 05 official mass metric codes or confirmation of the scheduling fallback semantics, special performance rules, relationship between elaborated/delivered values, final precision/rounding and precedence for automatic data arriving after durable proposal creation.
 
