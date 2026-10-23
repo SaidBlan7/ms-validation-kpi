@@ -72,7 +72,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 massPerformance = new JdbcMassPerformanceReferenceAdapter(ds, massSourceMode, elaboratedMetricCode, deliveredMetricCode);
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
-                validationPersistence = new JdbcValidationPersistenceAdapter(ds);
+                validationPersistence = new JdbcValidationPersistenceAdapter(ds, elaboratedMetricCode, deliveredMetricCode);
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 close = ds;
                 sqlDataSource = ds;
@@ -87,7 +87,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 massPerformance = new JdbcMassPerformanceReferenceAdapter(ds, massSourceMode, elaboratedMetricCode, deliveredMetricCode);
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
-                validationPersistence = new JdbcValidationPersistenceAdapter(ds);
+                validationPersistence = new JdbcValidationPersistenceAdapter(ds, elaboratedMetricCode, deliveredMetricCode);
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 close = ds;
                 sqlDataSource = ds;

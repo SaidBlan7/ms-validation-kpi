@@ -1,25 +1,24 @@
 # Spec 05 - Validación de masas elaboradas y entregadas
 
-## Implementado con la base canónica actual
+## Cerrada con la base canónica actual
 
 - Seguridad y alcance por planta/línea reutilizando Specs 01-03.
-- Sólo D-1, con revalidación server-side.
-- Referencia por línea + fecha + variable + UOM para `ELABORATED_MASS` y `DELIVERED_MASS`.
-- Fuente preferida `telemetry.derived_metric`; fallback de scheduling permanece explícitamente provisional.
-- Sólo UOM con `dimension_code=MASS`; se permiten cero y fracciones y se rechazan negativos/no numéricos.
-- El original se vuelve a cargar en servidor y una referencia stale/manipulada se rechaza.
-- `proposedValue` debe diferir del original.
-- Motivo/evidencia de Spec 06 y auditoría previa al guardado de Spec 07 se aplican también a este flujo.
+- Sólo D-1, calculado y revalidado con la zona horaria autoritativa de la planta.
+- `ELABORATED_MASS` se deriva de `scheduling.batch_execution.quantity/uom_id` para ejecuciones de manufactura con masa (`manufacturing_definition.dough_id`).
+- `DELIVERED_MASS` se deriva de `scheduling.finished_product_output`; cuando la salida no está ya en una UOM de dimensión `MASS`, se utiliza una `manufacturing.packaging_conversion` vigente desde la UOM capturada hacia una UOM `MASS`.
+- No se mezclan UOM diferentes. La corrección se identifica por línea + fecha + variable/métrica + UOM.
+- La identidad durable de la variable usa `kpi.kpi_validation_detail.metric_definition_id` contra `kpi.metric_definition`.
+- Los códigos de catálogo son configurables mediante `GBC_ELABORATED_MASS_METRIC_CODE` y `GBC_DELIVERED_MASS_METRIC_CODE`, con defaults `ELABORATED_MASS` y `DELIVERED_MASS`.
+- El original se vuelve a cargar en servidor inmediatamente antes de guardar; si cambió, la propuesta se rechaza y el usuario debe refrescar.
+- Ausencia de dato fuente no se interpreta como cero ni como captura manual.
+- Se aceptan cero y fracciones; se rechazan negativos y valores sin UOM canónica de dimensión `MASS`. Los valores se conservan con la precisión canónica sin redondeo adicional del micro.
+- Cada línea/fecha/métrica/UOM sólo puede generar una propuesta dentro de Validación KPI.
+- La propuesta se persiste atómicamente en `kpi.kpi_validation` + `kpi.kpi_validation_detail` con estado `PENDING`, original/propuesto, UOM, `metric_definition_id`, motivo y auditoría.
+- Si el dato automático cambia después de persistir, el original guardado permanece como evidencia inmutable de la propuesta; la resolución del cambio corresponde al flujo de Aprobación/recalculo, no a una edición silenciosa desde Validación.
+- Las masas elaboradas y entregadas se corrigen de forma independiente. Las fórmulas especiales de rendimiento no se infieren ni se validan en este módulo; pertenecen al cálculo OEE y a la aprobación.
 
-## Pendiente por modelo de datos (sin crear tablas nuevas)
+## Dependencias operativas
 
-La base canónica actual puede guardar `original_value`, `proposed_value` y `uom_id` en `kpi.kpi_validation_detail`, pero no identifica durablemente si ese detalle corresponde a `ELABORATED_MASS` o `DELIVERED_MASS`, ni conserva la identidad del agregado fuente. Por esa razón el micro NO asume `kpi_validation_mass_detail` ni ninguna otra extensión. La prevalidación queda disponible y `readyForSubmission=false` hasta que exista una solución canónica aprobada.
-
-## Pendiente por definición funcional/externa
-
-- Confirmar códigos oficiales de `telemetry.derived_metric` para masa elaborada/entregada.
-- Confirmar si los fallbacks de `batch_execution` y `finished_product_output` coinciden con la lógica OEE oficial.
-- Definir relación permitida entre masa elaborada y entregada para lógicas especiales.
-- Definir precisión/redondeo oficiales.
-- Definir precedencia si llegan datos automáticos después de una futura propuesta persistida.
-- Aplicación del valor aprobado pertenece al módulo Aprobación KPI.
+- Deben existir `kpi.metric_definition` activos para los dos códigos configurados. Si la definición fija `uom_id`, éste debe coincidir con la UOM de la propuesta.
+- Para producto terminado capturado en una UOM no-masa debe existir una `manufacturing.packaging_conversion` vigente y determinística hacia una UOM `MASS`; de lo contrario ese valor no aparece como masa entregada corregible.
+- La aplicación del valor aprobado sigue perteneciendo al módulo Aprobación KPI.

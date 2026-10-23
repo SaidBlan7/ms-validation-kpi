@@ -23,14 +23,14 @@ AUTO fallback when a variable has no exact derived metric:
 - only `core.unit_of_measure.dimension_code='MASS'` is accepted;
 - fallback entries are explicitly marked provisional and must not be represented as confirmed OEE formula semantics.
 
-Spec 05 prevalidation re-reads the canonical/provisional source. A stale/manipulated `originalValue` is blocked. Missing source data is not silently converted to zero because this is a correction flow, not manual capture.
+Spec 05 prevalidation re-reads the canonical scheduling source. A stale/manipulated `originalValue` is blocked. Missing source data is not silently converted to zero because this is a correction flow, not manual capture. Persistence uses `kpi_validation_detail.metric_definition_id`.
 
 ## Remaining external/functional dependencies
 
 - Validation KPI proposal persistence / status history (Specs 01, 04, 05).
 - Approval KPI and final application semantics.
 - Spec 04 exact cross-classification total-time mathematics remains open by specification; one-classification-per-validation is now the closed workflow decision. A future line-specific applicability catalog is only needed if negocio requires behavior stricter than the current canonical organization/global + observed-D-1 source.
-- Spec 05 official mass metric codes or confirmation of the scheduling fallback semantics, special performance rules, relationship between elaborated/delivered values, final precision/rounding and precedence for automatic data arriving after durable proposal creation.
+- Spec 05 catalog data must contain active metric definitions for the configured elaborated/delivered metric codes. Special line-specific performance formulas remain owned by OEE calculation/approval rather than guessed by Validation KPI.
 
 ## Validation performed in this review
 

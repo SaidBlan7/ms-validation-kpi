@@ -638,20 +638,12 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         List<MassPerformanceReferenceEntry> entries = massPerformanceReference.findObservedMasses(
                 plantId, lineId, businessDate, zone);
 
-        boolean provisionalFallback = entries.stream().anyMatch(entry ->
-                entry.sourceType() != null && entry.sourceType().endsWith("_PROVISIONAL"));
-        if (provisionalFallback) {
-            issues.add(ValidationIssue.warning("MASS_SCHEDULING_FALLBACK_PROVISIONAL",
-                    "At least one mass variable is using the canonical v1.2 scheduling fallback because no exact line-level derived metric was found. The mapping is explicit but still requires OEE performance confirmation"));
-        }
         if (entries.isEmpty()) {
             issues.add(ValidationIssue.warning("MASS_REFERENCE_NOT_FOUND",
                     "No canonical D-1 mass value was found for this line. Spec 05 distinguishes correction from manual capture, so absence is not silently converted to zero"));
         }
-        issues.add(ValidationIssue.warning("MASS_RELATION_RULE_PENDING_DEFINITION",
-                "No delivered-vs-elaborated relation is enforced because Spec 05 leaves special performance logic and allowed relationships undefined"));
-        issues.add(ValidationIssue.warning("MASS_PRECISION_ROUNDING_PENDING_DEFINITION",
-                "Canonical decimal values are preserved without application rounding; Spec 05 leaves final precision and rounding rules open"));
+        issues.add(ValidationIssue.warning("MASS_SPECIAL_PERFORMANCE_RELATION_NOT_ENFORCED",
+                "Elaborated and delivered mass are validated independently. Special line-specific performance relationships are not inferred by this module; approval/recalculation owns those formulas."));
         return new MassPerformanceReferenceResult(plantId, lineId, businessDate, eligibility.plantTimezone(),
                 massPerformanceReference.source(), massPerformanceReference.sourceMapping(), entries,
                 List.copyOf(issues));
@@ -670,11 +662,11 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 "SERVER_REVALIDATES_CANONICAL_REFERENCE_AND_REJECTS_STALE_ORIGINAL",
                 "NO_SOURCE_ROW_IS_NOT_TREATED_AS_ZERO_OR_MANUAL_CAPTURE",
                 "ONLY_CANONICAL_UOM_WITH_DIMENSION_CODE_MASS",
-                "PRESERVE_CANONICAL_DECIMALS_NO_APPLICATION_ROUNDING_PENDING_DEFINITION",
-                "PENDING_FUNCTIONAL_DEFINITION",
-                "RECHECK_BEFORE_SUBMISSION; POST_PERSISTENCE_PRECEDENCE_PENDING_DEFINITION",
+                "PRESERVE_CANONICAL_DECIMALS_AS_NUMERIC_24_8_NO_EXTRA_APPLICATION_ROUNDING",
+                "INDEPENDENT_VARIABLE_CORRECTIONS_SPECIAL_PERFORMANCE_FORMULAS_OUTSIDE_VALIDATION_MODULE",
+                "RECHECK_BEFORE_SUBMISSION; PERSISTED_ORIGINAL_IS_IMMUTABLE_EVIDENCE_IF_SOURCE_CHANGES_LATER",
                 ValidationWorkflowStatus.PENDING.name(),
-                validationPersistence.supportsMassPerformancePersistence() ? "IMPLEMENTED" : "PENDING_CANONICAL_DATA_MODEL");
+                validationPersistence.supportsMassPerformancePersistence() ? "IMPLEMENTED_METRIC_DEFINITION_ID" : "UNAVAILABLE");
     }
 
     @Override
@@ -741,24 +733,17 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                                 "The client originalValue differs from the current server-side D-1 reference. Refresh the data before proposing a correction"));
                     }
                 }
-                if (sourceType != null && sourceType.endsWith("_PROVISIONAL")) {
-                    issues.add(ValidationIssue.warning("MASS_SOURCE_MAPPING_PROVISIONAL",
-                            "The selected value is using a canonical scheduling fallback whose elaborated/delivered interpretation still requires OEE performance confirmation"));
-                }
             }
         }
 
-        issues.add(ValidationIssue.warning("MASS_RELATION_RULE_PENDING_DEFINITION",
-                "No relationship between elaborated and delivered mass is enforced because Spec 05 leaves this rule open, especially for special performance logic"));
-        issues.add(ValidationIssue.warning("MASS_PRECISION_ROUNDING_PENDING_DEFINITION",
-                "Fractional canonical values are accepted without additional application rounding; final precision and rounding remain undefined in Spec 05"));
-        issues.add(ValidationIssue.warning("LATE_AUTOMATIC_DATA_POST_PERSISTENCE_PRECEDENCE_PENDING",
-                "The server rechecks the source before submission, but Spec 05 does not define what wins if automatic data changes after a validation proposal has already been persisted"));
+        issues.add(ValidationIssue.warning("MASS_SPECIAL_PERFORMANCE_RELATION_NOT_ENFORCED",
+                "Elaborated and delivered mass are independent correction targets. Special line-specific performance relationships are evaluated by the OEE performance calculation/approval flow, not guessed here."));
+        String massMetricCode = command.variable() == null ? null : massMetricCode(command.variable());
         if (!validationPersistence.supportsMassPerformancePersistence()) {
-            issues.add(ValidationIssue.warning("MASS_PERSISTENCE_PENDING_CANONICAL_DATA_MODEL",
-                    "Prevalidation is available, but the current canonical schema does not durably identify ELABORATED_MASS versus DELIVERED_MASS in kpi_validation_detail. No non-canonical table is assumed."));
+            issues.add(ValidationIssue.blocker("MASS_PERSISTENCE_UNAVAILABLE",
+                    "Mass validation persistence is unavailable in the selected runtime."));
         } else if (command.variable() != null && command.uomId() > 0
-                && validationPersistence.existsForMassPerformance(command.lineId(), command.businessDate(), command.uomId(), command.variable())) {
+                && validationPersistence.existsForMassPerformance(command.lineId(), command.businessDate(), command.uomId(), massMetricCode)) {
             issues.add(ValidationIssue.blocker("MASS_VALUE_ALREADY_VALIDATED",
                     "This line/date/variable/UOM already has a validation proposal and cannot be edited again"));
         }
@@ -769,7 +754,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 command.originalValue(), command.proposedValue(), observedReferenceValue,
                 originalMatchesOperationalReference, sourceAggregateKey, sourceType, justification,
                 auditEvidence(actor), massPerformanceReference.source(), ValidationWorkflowStatus.PENDING.name(),
-                validationPersistence.supportsMassPerformancePersistence() ? "CANONICAL_PERSISTENCE_READY" : "PENDING_CANONICAL_DATA_MODEL", List.copyOf(issues));
+                validationPersistence.supportsMassPerformancePersistence() ? "CANONICAL_PERSISTENCE_READY_METRIC_DEFINITION" : "PERSISTENCE_UNAVAILABLE", List.copyOf(issues));
     }
 
     @Override
@@ -794,7 +779,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         if (expiresAt.isBefore(now)) expiresAt = now;
         CorrectionJustificationView j = pre.justification();
         return validationPersistence.createMassPerformance(new MassPerformanceValidationPersistenceRequest(
-                command.plantId(), command.lineId(), command.businessDate(), command.uomId(), command.variable(),
+                command.plantId(), command.lineId(), command.businessDate(), command.uomId(), command.variable(), massMetricCode(command.variable()),
                 command.originalValue(), command.proposedValue(), pre.sourceAggregateKey(), pre.sourceType(),
                 command.reasonType(), null, j == null ? null : j.operationalCause(), j == null ? null : j.actionPlan(),
                 j == null ? null : j.incidentNumber(), evidence.canonicalUserId(), now, expiresAt, correlationId));
@@ -819,6 +804,12 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 result.proposedAt(), result.expiresAt(), result.approvedByUserId(), result.approvedAt(), result.auditEvidence(), List.copyOf(issues));
     }
 
+
+    private String massMetricCode(MassPerformanceVariable variable) {
+        return variable == MassPerformanceVariable.ELABORATED_MASS
+                ? massPerformanceReference.elaboratedMetricCode()
+                : massPerformanceReference.deliveredMetricCode();
+    }
 
     private CorrectionJustificationView validateAndNormalizeJustification(ValidationReasonType reasonType,
             String incidentNumber, String operationalCause, String actionPlan, List<ValidationIssue> issues) {
@@ -1128,15 +1119,15 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Spec 04 proposals persist as PENDING using kpi.kpi_validation_detail.stop_classification_id with original/proposed values and transactional one-opportunity protection"),
                 new CapabilityView("multiClassificationValidation", "CLOSED_ONE_CLASSIFICATION_PER_VALIDATION",
                         "Closure decision: each line/date/classification correction is its own immutable validation proposal; correcting several classifications creates several independent proposals"),
-                new CapabilityView("massPerformanceReference", "IMPLEMENTED_CANONICAL_V1_2",
-                        "Spec 05 prefers exact line-level telemetry.derived_metric values by semantic metric code and falls back per variable to canonical scheduling data when configured AUTO and no derived metric exists"),
+                new CapabilityView("massPerformanceReference", "IMPLEMENTED_CANONICAL_SCHEDULING",
+                        "Spec 05 reads elaborated mass from scheduling.batch_execution and delivered mass from scheduling.finished_product_output with canonical packaging conversion to MASS when needed"),
                 new CapabilityView("massPerformanceOriginalReconciliation", "IMPLEMENTED",
                         "Prevalidation re-reads the D-1 line/variable/UOM reference and blocks stale or manipulated originalValue"),
                 new CapabilityView("massPerformanceNumericValidation", "IMPLEMENTED",
                         "Spec 05 accepts canonical decimal zero/positive values, rejects negatives, and requires a canonical UOM with dimension_code=MASS"),
                 new CapabilityView("massPerformanceVariableEnablement", "IMPLEMENTED_SEMANTIC_CODES",
                         "ELABORATED_MASS and DELIVERED_MASS are explicit variables; derived metric codes are configurable through GBC_ELABORATED_MASS_METRIC_CODE and GBC_DELIVERED_MASS_METRIC_CODE"),
-                new CapabilityView("massPerformancePersistence", "PENDING_CANONICAL_DATA_MODEL", "Spec 05 prevalidation is implemented, but the current canonical schema cannot durably distinguish ELABORATED_MASS from DELIVERED_MASS without a future approved model change; no extra table is assumed"),
+                new CapabilityView("massPerformancePersistence", "IMPLEMENTED_METRIC_DEFINITION_ID", "Spec 05 persists PENDING proposals through kpi.kpi_validation_detail.metric_definition_id using the canonical metric catalog"),
                 new CapabilityView("massPerformanceMissingOriginal", "IMPLEMENTED_CONSERVATIVE",
                         "A missing canonical source row is not converted to zero because Spec 05 is a correction flow rather than KPI Manual capture-from-zero"),
                 new CapabilityView("massPerformanceRelationRule", "PENDING_DEFINITION",

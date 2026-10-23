@@ -13,12 +13,12 @@ public interface MassPerformanceReferencePort {
 
     boolean uomIsMassDimension(long uomId);
 
-    default String source() { return "CANONICAL_V1_2_MASS_REFERENCE"; }
+    default String source() { return "CANONICAL_SCHEDULING_MASS_REFERENCE"; }
 
-    default String sourceMode() { return "AUTO"; }
+    default String sourceMode() { return "SCHEDULING_CANONICAL"; }
 
     default String sourceMapping() {
-        return "DERIVED_METRIC_ELABORATED_MASS_DELIVERED_MASS_WITH_PROVISIONAL_SCHEDULING_FALLBACK";
+        return "ELABORATED=batch_execution;DELIVERED=finished_product_output+packaging_conversion_to_MASS";
     }
 
     default String elaboratedMetricCode() { return "ELABORATED_MASS"; }

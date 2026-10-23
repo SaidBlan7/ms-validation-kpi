@@ -314,20 +314,20 @@ paths:
   /api/v1/oee-validation/masses/reference:
     get:
       summary: Returns previous-day elaborated/delivered mass references by line variable and UOM
-      description: Read-only v1.2 reference. In AUTO mode each variable first looks for an exact line-level telemetry.derived_metric covering the plant-local D-1 window using configurable metric codes. If no derived metric exists, ELABORATED_MASS may fall back to MASS-UOM scheduling.batch_execution for dough manufacturing executions and DELIVERED_MASS may fall back to MASS-UOM scheduling.finished_product_output. Fallback entries are explicitly marked provisional and units are never mixed.
+      description: Canonical D-1 reference. ELABORATED_MASS is aggregated from scheduling.batch_execution for dough manufacturing executions. DELIVERED_MASS is aggregated from scheduling.finished_product_output and converted through a vigente manufacturing.packaging_conversion when the captured UOM is not already MASS. Units are never mixed.
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
         - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
         - { in: query, name: businessDate, required: true, schema: { type: string, format: date } }
       responses:
-        '200': { description: Canonical/provisional mass references for D-1 }
+        '200': { description: Canonical mass references for D-1 }
         '400': { description: Invalid date/scope request }
         '401': { description: Authentication required }
         '403': { description: Actor is not authorized for the requested KPI plant scope }
   /api/v1/oee-validation/masses/prevalidate:
     post:
       summary: Prevalidates one Spec 05 mass correction plus Specs 06-07 evidence before persistence
-      description: Validates D-1/security scope, canonical MASS UOM, variable, decimal non-negative values and reason details. The backend reloads the current line/date/variable/UOM reference and blocks a stale or manipulated originalValue. A missing source row is not treated as zero because Spec 05 is a correction flow, not KPI Manual capture. Responses include sourceAggregateKey, sourceType, normalized justification, auditEvidence and targetStatusIfPersisted=PENDING. Relation rules, final rounding and post-persistence late-data precedence remain pending; durable Spec 05 persistence is intentionally not advertised with the current canonical schema because it cannot identify ELABORATED_MASS versus DELIVERED_MASS durably without an approved future data-model change.
+      description: Validates D-1/security scope, canonical MASS UOM, variable, decimal non-negative values and reason details. The backend reloads the current line/date/variable/UOM reference and blocks a stale or manipulated originalValue. A missing source row is not treated as zero because Spec 05 is a correction flow, not KPI Manual capture. Responses include sourceAggregateKey, sourceType, normalized justification, auditEvidence and targetStatusIfPersisted=PENDING. Values are validated independently, canonical decimals are preserved without extra application rounding, and persistence uses kpi_validation_detail.metric_definition_id. If the automatic source changes after persistence, the stored original remains immutable evidence for Approval KPI.
       requestBody:
         required: true
         content:
@@ -354,8 +354,8 @@ paths:
         '403': { description: Actor is not authorized for the requested KPI plant scope }
   /api/v1/oee-validation/masses/validations:
     post:
-      summary: Attempts submission of a Spec 05 mass correction
-      description: Re-runs server-side prevalidation but does not persist with the current canonical schema. kpi_validation_detail has values/UOM but no durable identity for ELABORATED_MASS versus DELIVERED_MASS; the service does not assume a non-canonical extension.
+      summary: Submits a Spec 05 mass correction
+      description: Re-runs server-side prevalidation and persists one PENDING proposal in kpi.kpi_validation plus kpi.kpi_validation_detail. metric_definition_id identifies ELABORATED_MASS or DELIVERED_MASS durably.
       requestBody:
         required: true
         content:

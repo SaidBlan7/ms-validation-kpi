@@ -56,7 +56,7 @@ Los adapters de Specs 04-05 todavía reflejan la baseline anterior y se migrará
 
 ## Seguridad y asignación KPI
 
-En PostgreSQL/Lakebase v1.2, la autorización funcional ya se resuelve desde `app_security`; no depende de `GBC_KPI_VALIDATOR_ASSIGNMENTS`. Los códigos semánticos provisionales, centralizados y reemplazables, son:
+En PostgreSQL/Lakebase v1.2, la autorización funcional ya se resuelve desde `app_security`; no depende de `GBC_KPI_VALIDATOR_ASSIGNMENTS`. Los códigos de métrica configurables, centralizados y reemplazables, son:
 
 - role code: `KPI_OEE_VALIDATOR` (`GBC_KPI_VALIDATOR_ROLE_CODE`)
 - capability code: `KPI_OEE_VALIDATION` (`GBC_KPI_VALIDATOR_CAPABILITY_CODE`)
@@ -111,8 +111,8 @@ La regla temporal queda cerrada como **D-1 calendario 00:00–00:00 en `core.pla
 | `GBC_KPI_VALIDATOR_ROLE` | role claim usado sólo en modo local/external-config |
 | `GBC_KPI_VALIDATOR_ASSIGNMENTS` | fixture de asignaciones usado sólo en `memory` |
 | `GBC_MASS_PERFORMANCE_SOURCE_MODE` | `AUTO` (default), `DERIVED_METRIC_ONLY` o `SCHEDULING_FALLBACK_ONLY` |
-| `GBC_ELABORATED_MASS_METRIC_CODE` | código semántico de `telemetry.derived_metric`; default `ELABORATED_MASS` |
-| `GBC_DELIVERED_MASS_METRIC_CODE` | código semántico de `telemetry.derived_metric`; default `DELIVERED_MASS` |
+| `GBC_ELABORATED_MASS_METRIC_CODE` | `kpi.metric_definition.metric_code` para masa elaborada; default `ELABORATED_MASS` |
+| `GBC_DELIVERED_MASS_METRIC_CODE` | `kpi.metric_definition.metric_code` para masa entregada; default `DELIVERED_MASS` |
 | `DEV_TENANT_ID`, `DEV_USER_OID` | identidad inmutable usada únicamente con `AUTH_MODE=mock` |
 | `DEV_USER_DISPLAY_NAME`, `DEV_USER_EMAIL` | snapshots opcionales de presentación para Spec 07 en modo mock |
 | `JDBC_URL`, `DB_USER`, `DB_PASSWORD` | modo `postgres-password` |
@@ -168,8 +168,8 @@ El único punto funcional de Spec 04 que permanece abierto es la fórmula exacta
 
 - `GET /api/v1/oee-validation/masses/policy`: publica la estrategia de fuente, códigos semánticos, identidad del dato y reglas pendientes.
 - `GET /api/v1/oee-validation/masses/reference`: referencia read-only D-1 por `línea + variable + UOM`; ya no depende del `itemId` ni de tablas legacy.
-- Fuente preferida: `telemetry.derived_metric` con ventana exacta D-1 de línea y códigos configurables `ELABORATED_MASS` / `DELIVERED_MASS`.
-- En `AUTO`, si falta el derived metric de una variable, se usa fallback canónico explícitamente provisional: `batch_execution` para elaborada y `finished_product_output` para entregada, sólo con UOM `dimension_code=MASS`.
+- Fuente canónica confirmada por Data: `scheduling.batch_execution` para masa elaborada y `scheduling.finished_product_output` para masa entregada.
+- Si una salida terminada está en una UOM no-masa, se convierte mediante una `manufacturing.packaging_conversion` vigente hacia una UOM con `dimension_code=MASS`. La propuesta persistida se identifica con `kpi_validation_detail.metric_definition_id`.
 - `POST /masses/prevalidate` vuelve a consultar el original en servidor y bloquea un `originalValue` stale/manipulado.
 - Un dato inexistente no se convierte silenciosamente en cero: Spec 05 es corrección de datos registrados/calculados, no captura manual desde cero.
 - Se aceptan fracciones y cero cuando el valor canónico existe; negativos se rechazan y no se aplica redondeo adicional.

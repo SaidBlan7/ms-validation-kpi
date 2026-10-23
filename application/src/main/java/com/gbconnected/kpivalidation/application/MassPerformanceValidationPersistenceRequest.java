@@ -12,6 +12,7 @@ public record MassPerformanceValidationPersistenceRequest(
         LocalDate businessDate,
         long uomId,
         MassPerformanceVariable variable,
+        String metricCode,
         BigDecimal originalValue,
         BigDecimal proposedValue,
         String sourceAggregateKey,
@@ -30,3 +31,4 @@ public record MassPerformanceValidationPersistenceRequest(
         return "mass:line:" + lineId + ":date:" + businessDate + ":variable:" + variable.name() + ":uom:" + uomId;
     }
 }
+

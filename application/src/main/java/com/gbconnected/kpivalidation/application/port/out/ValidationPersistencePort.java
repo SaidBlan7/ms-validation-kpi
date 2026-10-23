@@ -7,7 +7,7 @@ import java.util.Optional;
 public interface ValidationPersistencePort {
     boolean available();
 
-    /** Mass-performance persistence needs a durable variable identity that is not present in the current canonical schema. */
+    /** Canonical schema supports Spec 05 through kpi_validation_detail.metric_definition_id. */
     default boolean supportsMassPerformancePersistence() { return false; }
 
     OeeValidationResult create(ValidationPersistenceRequest request);
@@ -20,7 +20,7 @@ public interface ValidationPersistencePort {
 
     MassPerformanceValidationResult createMassPerformance(MassPerformanceValidationPersistenceRequest request);
     Optional<MassPerformanceValidationResult> findMassPerformanceById(long validationId);
-    boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, com.gbconnected.kpivalidation.domain.MassPerformanceVariable variable);
+    boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, String metricCode);
 
     static ValidationPersistencePort unavailable() {
         return new ValidationPersistencePort() {
@@ -33,7 +33,7 @@ public interface ValidationPersistencePort {
             @Override public boolean existsForStopTime(long lineId, LocalDate businessDate, long stopClassificationId) { return false; }
             @Override public MassPerformanceValidationResult createMassPerformance(MassPerformanceValidationPersistenceRequest request) { throw new IllegalStateException("Validation persistence unavailable"); }
             @Override public Optional<MassPerformanceValidationResult> findMassPerformanceById(long validationId) { return Optional.empty(); }
-            @Override public boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, com.gbconnected.kpivalidation.domain.MassPerformanceVariable variable) { return false; }
+            @Override public boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, String metricCode) { return false; }
         };
     }
 }

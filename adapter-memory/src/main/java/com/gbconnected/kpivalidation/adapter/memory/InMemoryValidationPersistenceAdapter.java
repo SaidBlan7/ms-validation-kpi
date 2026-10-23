@@ -18,6 +18,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     private final ConcurrentHashMap<Long, MassPerformanceValidationResult> massById = new ConcurrentHashMap<>();
 
     @Override public boolean available() { return true; }
+    @Override public boolean supportsMassPerformancePersistence() { return true; }
     @Override public boolean existsForKpiResult(long kpiResultId) { return byKpiResult.containsKey(kpiResultId); }
 
     @Override
@@ -63,7 +64,10 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     }
 
     @Override
-    public boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, com.gbconnected.kpivalidation.domain.MassPerformanceVariable variable) {
+    public boolean existsForMassPerformance(long lineId, LocalDate businessDate, long uomId, String metricCode) {
+        if (metricCode == null || metricCode.isBlank()) return false;
+        com.gbconnected.kpivalidation.domain.MassPerformanceVariable variable =
+                com.gbconnected.kpivalidation.domain.MassPerformanceVariable.valueOf(metricCode);
         return byMass.containsKey(massKey(lineId, businessDate, uomId, variable));
     }
 

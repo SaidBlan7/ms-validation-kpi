@@ -159,3 +159,8 @@ No se agregan tablas, columnas ni escrituras a la BD canónica.
 - Spec 07: immutable Entra tenant/object ids and canonical user id are returned; current display/email are clearly treated as current profile data, not a historical snapshot.
 - Spec 05: removed every PostgreSQL dependency on `kpi_validation_mass_detail`; no new table/column is assumed.
 - Specs 01-04 remain on the canonical schema; no DDL was introduced.
+## Spec 05 closure
+- Closed Spec 05 against the updated canonical model with `kpi.kpi_validation_detail.metric_definition_id`.
+- Elaborated mass now uses `scheduling.batch_execution`; delivered mass uses `scheduling.finished_product_output` with vigente `manufacturing.packaging_conversion` to MASS when required.
+- Added durable PENDING persistence, duplicate protection by line/date/metric/UOM, and canonical metric-definition resolution.
+- Removed the old derived-metric/provisional-fallback assumption for Spec 05.

@@ -16,7 +16,7 @@
 
 ## Limitación heredada de Spec 05
 
-La justificación de masas se valida y normaliza, pero no puede persistirse como una propuesta de masa mientras el modelo canónico no pueda identificar durablemente `ELABORATED_MASS`/`DELIVERED_MASS`.
+La justificación de masas se valida, normaliza y persiste atómicamente junto con la propuesta de Spec 05 mediante `kpi_validation_detail.metric_definition_id`.
 
 ## Pendiente / dependencia externa
 
