@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.13.0
-  description: Specs 01-07 KPI Validation plus KPI Manuales Spec 01. Manual capture is isolated from Validation/Approval KPI; memory persistence is complete while PostgreSQL remains fail-closed until the canonical Manual KPI business entity exists.
+  version: 0.14.0
+  description: Specs 01-07 KPI Validation plus KPI Manuales Specs 01-02. Manual capture is isolated from Validation/Approval KPI; Spec 02 scope/assignment uses canonical security history while Spec 01 PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
 paths:
   /api/v1/manual-kpis/policy:
     get:
@@ -75,6 +75,62 @@ paths:
         '403': { description: Plant/line/capability scope denied }
         '422': { description: Business rule violation, including expired edit window }
         '503': { description: Canonical Manual KPI persistence is not yet available in PostgreSQL/Lakebase }
+  /api/v1/manual-kpis/scope/me:
+    get:
+      summary: Returns the effective KPI Manuales plants and enabled lines for the authenticated superuser
+      description: Intersects current generic plant access, current line access, current line-to-plant assignment, plant/line active state, KPI Manuales role/capability and effective feature activation.
+      responses:
+        '200': { description: Effective plant/line scope }
+        '401': { description: Authentication required }
+  /api/v1/manual-kpis/scope/policy:
+    get:
+      summary: Returns Spec 02 scope and revocation policy
+      responses:
+        '200': { description: Manual KPI scope policy }
+  /api/v1/manual-kpis/scope/admin/assignments:
+    get:
+      summary: Lists KPI Manuales role assignment history for a plant
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: Assignment history }
+        '403': { description: Scope administration capability required }
+    post:
+      summary: Assigns KPI Manuales scope for one superuser and plant
+      description: Creates a plant-scoped user_role_assignment for the configured KPI Manuales role. The target must already have current generic user_plant_access for the plant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, plantId]
+              properties:
+                targetUserId: { type: integer, format: int64 }
+                plantId: { type: integer, format: int64 }
+                reason: { type: string }
+      responses:
+        '200': { description: Assignment created }
+        '403': { description: Scope administration capability required }
+        '409': { description: Duplicate assignment or missing generic plant access }
+    delete:
+      summary: Revokes KPI Manuales scope for one superuser and plant
+      description: Closes valid_to on the effective plant-scoped KPI Manuales role assignment; historical records keep the original actor identity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, plantId, reason]
+              properties:
+                targetUserId: { type: integer, format: int64 }
+                plantId: { type: integer, format: int64 }
+                reason: { type: string }
+      responses:
+        '200': { description: Assignment revoked }
+        '403': { description: Scope administration capability required }
+        '409': { description: No effective assignment exists }
   /api/v1/oee-validation/capabilities:
     get:
       summary: Shows implemented and pending KPI Validation capabilities

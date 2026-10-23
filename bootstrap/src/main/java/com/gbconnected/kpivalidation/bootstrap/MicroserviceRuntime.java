@@ -12,6 +12,7 @@ import com.gbconnected.kpivalidation.adapter.postgres.manual.*;
 import com.gbconnected.kpivalidation.application.*;
 import com.gbconnected.kpivalidation.application.port.out.*;
 import com.gbconnected.kpivalidation.application.manual.*;
+import com.gbconnected.kpivalidation.application.manual.scope.*;
 import com.gbconnected.kpivalidation.application.port.out.manual.*;
 import com.gbconnected.kpivalidation.domain.CorrectionReasonPolicy;
 import com.zaxxer.hikari.HikariDataSource;
@@ -23,12 +24,18 @@ public final class MicroserviceRuntime implements AutoCloseable {
     private final OeeValidationService validation;
     private final DatabaseHealthPort health;
     private final ManualKpiUseCase manualKpis;
+    private final ManualKpiScopeUseCase manualKpiScope;
+    private final AdministerManualKpiScopeUseCase manualKpiScopeAdministration;
     private final AutoCloseable closeable;
 
-    private MicroserviceRuntime(OeeValidationService validation, DatabaseHealthPort health, ManualKpiUseCase manualKpis, AutoCloseable closeable) {
+    private MicroserviceRuntime(OeeValidationService validation, DatabaseHealthPort health, ManualKpiUseCase manualKpis,
+            ManualKpiScopeUseCase manualKpiScope, AdministerManualKpiScopeUseCase manualKpiScopeAdministration,
+            AutoCloseable closeable) {
         this.validation = validation;
         this.health = health;
         this.manualKpis = manualKpis;
+        this.manualKpiScope = manualKpiScope;
+        this.manualKpiScopeAdministration = manualKpiScopeAdministration;
         this.closeable = closeable;
     }
 
@@ -48,6 +55,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
         ManualKpiReferencePort manualReferences;
         ManualKpiPersistencePort manualPersistence;
         FeatureActivationPort manualFeatureActivation;
+        ManualKpiScopePort manualScope;
+        ManualKpiScopeAdministrationPort manualScopeAdministration = ManualKpiScopeAdministrationPort.unavailable();
         AutoCloseable close = () -> { };
         DataSource sqlDataSource = null;
         String massSourceMode = env.getOrDefault("GBC_MASS_PERFORMANCE_SOURCE_MODE", "AUTO");
@@ -76,6 +85,10 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 manualReferences = new InMemoryManualKpiReferenceAdapter();
                 manualPersistence = new InMemoryManualKpiPersistenceAdapter();
                 manualFeatureActivation = FeatureActivationPort.enabledByDefault(env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
+                manualScope = new InMemoryManualKpiScopeAdapter(tenant, user, plant, line, timezone);
+                manualScopeAdministration = new InMemoryManualKpiScopeAdministrationAdapter(tenant, user,
+                        Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")), plant,
+                        env.getOrDefault("GBC_MANUAL_KPI_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_MANUAL_SCOPE_ADMIN"));
             }
             case "postgres-password" -> {
                 HikariDataSource ds = PooledDataSourceFactory.createPasswordDataSource(settings);
@@ -93,6 +106,11 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 manualReferences = new JdbcManualKpiReferenceAdapter(ds);
                 manualPersistence = ManualKpiPersistencePort.unavailable("CANONICAL_STORAGE_PENDING_DATA_MODEL");
                 manualFeatureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
+                manualScope = new JdbcManualKpiScopeAdapter(ds);
+                manualScopeAdministration = new JdbcManualKpiScopeAdministrationAdapter(ds,
+                        env.getOrDefault("GBC_MANUAL_KPI_ROLE_CODE", "KPI_MANUAL_SUPERUSER"),
+                        env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"),
+                        env.getOrDefault("GBC_MANUAL_KPI_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_MANUAL_SCOPE_ADMIN"));
                 close = ds;
                 sqlDataSource = ds;
             }
@@ -112,6 +130,11 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 manualReferences = new JdbcManualKpiReferenceAdapter(ds);
                 manualPersistence = ManualKpiPersistencePort.unavailable("CANONICAL_STORAGE_PENDING_DATA_MODEL");
                 manualFeatureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
+                manualScope = new JdbcManualKpiScopeAdapter(ds);
+                manualScopeAdministration = new JdbcManualKpiScopeAdministrationAdapter(ds,
+                        env.getOrDefault("GBC_MANUAL_KPI_ROLE_CODE", "KPI_MANUAL_SUPERUSER"),
+                        env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"),
+                        env.getOrDefault("GBC_MANUAL_KPI_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_MANUAL_SCOPE_ADMIN"));
                 close = ds;
                 sqlDataSource = ds;
             }
@@ -162,7 +185,9 @@ public final class MicroserviceRuntime implements AutoCloseable {
         ManualKpiService manualService = new ManualKpiService(
                 access, context, actorIdentity, manualFeatureActivation, manualAuthorization, manualReferences,
                 manualPersistence, Clock.systemUTC());
-        return new MicroserviceRuntime(service, health, manualService, close);
+        ManualKpiScopeService manualScopeService = new ManualKpiScopeService(
+                actorIdentity, manualFeatureActivation, manualAuthorization, manualScope, manualScopeAdministration);
+        return new MicroserviceRuntime(service, health, manualService, manualScopeService, manualScopeService, close);
     }
 
     public CheckEligibilityUseCase eligibility() { return validation; }
@@ -190,6 +215,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
     public GetWorkflowPolicyUseCase workflowPolicy() { return validation; }
     public DatabaseHealthPort health() { return health; }
     public ManualKpiUseCase manualKpis() { return manualKpis; }
+    public ManualKpiScopeUseCase manualKpiScope() { return manualKpiScope; }
+    public AdministerManualKpiScopeUseCase manualKpiScopeAdministration() { return manualKpiScopeAdministration; }
 
     private static int optionalNonNegativeInt(Map<String, String> env, String key) {
         String raw = env.get(key);
