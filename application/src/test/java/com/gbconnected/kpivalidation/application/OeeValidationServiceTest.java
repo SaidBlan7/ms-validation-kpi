@@ -53,10 +53,10 @@ class OeeValidationServiceTest {
                 return List.of(
                         new MassPerformanceReferenceEntry(com.gbconnected.kpivalidation.domain.MassPerformanceVariable.ELABORATED_MASS,
                                 10L, "KG", "Kilogram", "MASS", new BigDecimal("1250.5"), 4L,
-                                "TELEMETRY_DERIVED_METRIC", "mass:line:10:date:" + date + ":variable:ELABORATED_MASS:uom:10"),
+                                "SCHEDULING_BATCH_EXECUTION", "mass:line:10:date:" + date + ":variable:ELABORATED_MASS:uom:10"),
                         new MassPerformanceReferenceEntry(com.gbconnected.kpivalidation.domain.MassPerformanceVariable.DELIVERED_MASS,
                                 10L, "KG", "Kilogram", "MASS", new BigDecimal("1210.25"), 3L,
-                                "TELEMETRY_DERIVED_METRIC", "mass:line:10:date:" + date + ":variable:DELIVERED_MASS:uom:10"));
+                                "SCHEDULING_FINISHED_PRODUCT_OUTPUT", "mass:line:10:date:" + date + ":variable:DELIVERED_MASS:uom:10"));
             }
             public boolean uomExists(long uomId) { return uomId == 10L; }
             public boolean uomIsMassDimension(long uomId) { return uomId == 10L; }

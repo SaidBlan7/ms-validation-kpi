@@ -17,13 +17,13 @@ public final class InMemoryMassPerformanceReferenceAdapter implements MassPerfor
                         MassPerformanceVariable.ELABORATED_MASS,
                         10L, "KG", "Kilogram", "MASS",
                         new BigDecimal("1250.500000"), 4L,
-                        "TELEMETRY_DERIVED_METRIC",
+                        "SCHEDULING_BATCH_EXECUTION",
                         aggregateKey(lineId, businessDate, MassPerformanceVariable.ELABORATED_MASS, 10L)),
                 new MassPerformanceReferenceEntry(
                         MassPerformanceVariable.DELIVERED_MASS,
                         10L, "KG", "Kilogram", "MASS",
                         new BigDecimal("1210.250000"), 3L,
-                        "TELEMETRY_DERIVED_METRIC",
+                        "SCHEDULING_FINISHED_PRODUCT_OUTPUT",
                         aggregateKey(lineId, businessDate, MassPerformanceVariable.DELIVERED_MASS, 10L)));
     }
 

@@ -13,7 +13,11 @@ paths:
   /api/v1/oee-validation/justification/policy:
     get:
       summary: Returns the current Spec 06 justification policy
-      description: Declares allowed reasons and required evidence. Optional per-field maximum lengths and an optional incident regex are enforced when configured; GB Support online validation and sensitive-data policy remain pending.
+      description: >-
+        Declares the closed Spec 06 reason/evidence policy: OPERATIVE requires cause and action plan;
+        SYSTEM requires an incident number. Incident numbers are normalized single-line text up to 200 Unicode
+        characters; cause and action plan are normalized text up to 2000 Unicode characters each. No incident regex
+        or online GB Support validation is applied by this service.
       responses:
         '200': { description: Justification policy }
         '401': { description: Authentication required }
@@ -307,7 +311,11 @@ paths:
   /api/v1/oee-validation/masses/policy:
     get:
       summary: Returns the current Spec 05 mass-performance validation policy
-      description: Declares source mode, configurable semantic derived-metric codes, line/date/variable/UOM aggregate identity, canonical MASS-UOM rule, server-side original reconciliation, scheduling fallback status, and the functional rules still pending definition/persistence.
+      description: >-
+        Declares the closed Spec 05 mass-validation policy: ELABORATED_MASS is sourced from
+        scheduling.batch_execution; DELIVERED_MASS is sourced from scheduling.finished_product_output and canonical
+        packaging conversion when conversion to a MASS UOM is required. Persistence uses
+        kpi.kpi_validation_detail.metric_definition_id and the configured canonical metric_definition codes.
       responses:
         '200': { description: Mass-performance policy }
         '401': { description: Authentication required }

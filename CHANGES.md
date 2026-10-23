@@ -32,13 +32,13 @@
 # Spec 05 v1.2 — migración canónica y hardening
 
 - eliminado uso legacy de `scheduling.intermediate_material_movement`, `core.item` e `itemId`.
-- fuente preferida migrada a `telemetry.derived_metric` con códigos configurables por variable.
-- fallback v1.2 explícitamente provisional: `batch_execution` para elaborada y `finished_product_output` para entregada.
+- [Historical, superseded by Spec 05 closure] An intermediate iteration preferred `telemetry.derived_metric`; the closed implementation no longer does so.
+- Final canonical sources: `scheduling.batch_execution` for elaborated mass and `scheduling.finished_product_output` for delivered mass, with canonical packaging conversion when needed.
 - contrato de referencia/prevalidación cambiado a `línea + D-1 + variable + UOM`.
 - UOM validada con `dimension_code=MASS`.
 - original revalidado server-side; stale/manipulado bloquea con `ORIGINAL_MASS_VALUE_CHANGED`.
 - ausencia de original bloquea con `MASS_ORIGINAL_VALUE_NOT_FOUND`; no se asume cero.
-- agregado `sourceAggregateKey`, `sourceType`, `targetStatusIfPersisted=PENDING_APPROVAL` y `/masses/policy`.
+- agregado `sourceAggregateKey`, `sourceType`, target status `PENDING` y `/masses/policy`; persistence is now canonical through `metric_definition_id`.
 - OpenAPI 0.9.0, docs y configuración local actualizados.
 - sin escrituras ni DDL sobre la baseline canónica.
 

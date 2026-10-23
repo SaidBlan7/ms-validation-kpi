@@ -1,105 +1,33 @@
-# Current closure status
+# Final review — Specs 01-07
 
-The current canonical implementation supersedes older incremental notes below where they conflict. Spec 06 is closed with fixed limits (incident 200, cause/action plan 2000), capture-only incident semantics, canonical atomic persistence for OEE/stop-time/mass proposals, and no application logging of full justification content. No Spec 06 database change is required.
+This file describes the current integrated implementation only. Older incremental decisions in CHANGES.md are historical and are superseded wherever they conflict with this document.
 
-# Review checkpoint — Specs 01-05 on canonical v1.2
+## Closed specifications
 
-## Current source status
+- **Spec 01**: D-1 calendar in `core.plant.timezone_name`; immutable original-value snapshot; one proposal opportunity per canonical datum through this service; new proposals persist as `PENDING`; Approval KPI owns approval/rejection and effective application.
+- **Spec 02**: plant-specific KPI validator entitlement; maximum two effective validators per plant; assignments remain active until explicit revocation; users may be assigned to multiple plants; revocation removes future access but does not delete or mutate existing `PENDING` proposals.
+- **Spec 03**: D-1 means the immediately previous local calendar day in the plant timezone; weekends and holidays are not skipped; every write revalidates D-1 server-side; stale screens/URLs are rejected after plant-local midnight.
+- **Spec 04**: stop-time reference is derived from `stops.stop_event`, `stops.stop_fragment`, `stops.classification_history` and `stops.stop_classification`; only `PROGRAMMED` and `UNPROGRAMMED` classifications are correctable; one classification correction is one validation proposal. The cross-classification total-time formula remains intentionally open because the specification explicitly forbids assuming a 24-hour rule without evidence.
+- **Spec 05**: elaborated mass comes from `scheduling.batch_execution`; delivered mass comes from `scheduling.finished_product_output`, using canonical `manufacturing.packaging_conversion` when conversion to a MASS UOM is required. Durable variable identity is `kpi.kpi_validation_detail.metric_definition_id` -> `kpi.metric_definition`. Proposals persist as `PENDING`. Missing source data is not treated as zero. Special line-specific performance formulas remain owned by OEE calculation/approval and are not invented by this service.
+- **Spec 06**: `OPERATIVE` requires cause + action plan; `SYSTEM` requires incident number. Incident number is normalized single-line text with a 200 Unicode-character maximum. Cause and action plan are normalized with a 2000 Unicode-character maximum each. No regex and no online GB Support validation are applied by this service.
+- **Spec 07**: `kpi.kpi_validation.proposed_at` is the absolute timestamp source of truth; presentation uses the plant IANA timezone. Historical actor identity is anchored by canonical `proposed_by_user_id` plus Entra tenant/object identifiers; current display name/email may be shown as presentation attributes. This microservice does not delete validation/audit evidence.
 
-- Specs 01-04 fueron revisadas nuevamente sobre el ZIP integrado y conservan sus garantías previas.
-- Spec 01: identidad/scope canónico, activación por planta, OEE original desde `kpi.kpi_result`, original/propuesto, justificación/evidencia y persistencia real en `kpi.kpi_validation` + detalle con estado `PENDING`.
-- Spec 02: entitlement KPI específico por planta con role/capability v1.2, acceso genérico independiente y bloqueo operativo si la planta excede dos validadores efectivos.
-- Spec 03: D-1 calendario local, fines de semana/festivos incluidos, revalidación server-side y expiración de contexto al siguiente midnight local.
-- Spec 04: agregado canónico por clasificación, original server-side, `oee_stop_type_code` canónico y persistencia PENDING por `stop_classification_id`.
-- Spec 05: eliminado el modelo legacy `intermediate_material_movement/core.item`; referencia por línea + variable + UOM sobre fuentes físicas v1.2.
+## Canonical persistence
 
-## Spec 05 source policy
+Validation proposals use `kpi.kpi_validation` plus `kpi.kpi_validation_detail`. OEE uses `kpi_result_id`; stop time uses `stop_classification_id`; masses use `metric_definition_id`. Reason/evidence fields are stored on the validation header and written atomically with the detail.
 
-Preferred source:
+## Intentional external dependencies / open business rules
 
-- exact line-level `telemetry.derived_metric` covering the D-1 local window;
-- configurable semantic metric codes `ELABORATED_MASS` / `DELIVERED_MASS`.
+- Approval KPI owns approval/rejection, approval comments and application of the approved correction.
+- GB Support online incident validation is not part of the current contract; only the incident reference is captured.
+- Spec 04 cross-classification total-time mathematics remains undefined by the source specification.
+- Spec 05 special line-specific performance formulas and the allowed elaborated-vs-delivered relationship remain outside this validation service until formally defined.
 
-AUTO fallback when a variable has no exact derived metric:
+## Source handoff hygiene
 
-- `scheduling.batch_execution` for ELABORATED_MASS when the manufacturing definition contains dough;
-- `scheduling.finished_product_output` for DELIVERED_MASS;
-- only `core.unit_of_measure.dimension_code='MASS'` is accepted;
-- fallback entries are explicitly marked provisional and must not be represented as confirmed OEE formula semantics.
-
-Spec 05 prevalidation re-reads the canonical scheduling source. A stale/manipulated `originalValue` is blocked. Missing source data is not silently converted to zero because this is a correction flow, not manual capture. Persistence uses `kpi_validation_detail.metric_definition_id`.
-
-## Remaining external/functional dependencies
-
-- Validation KPI proposal persistence / status history (Specs 01, 04, 05).
-- Approval KPI and final application semantics.
-- Spec 04 exact cross-classification total-time mathematics remains open by specification; one-classification-per-validation is now the closed workflow decision. A future line-specific applicability catalog is only needed if negocio requires behavior stricter than the current canonical organization/global + observed-D-1 source.
-- Spec 05 catalog data must contain active metric definitions for the configured elaborated/delivered metric codes. Special line-specific performance formulas remain owned by OEE calculation/approval rather than guessed by Validation KPI.
-
-## Validation performed in this review
-
-- Java 21 direct compilation passed for domain, application, memory, PostgreSQL adapter, bootstrap and App Service.
-- Azure Functions source compilation passed using API-core stubs plus the packaged Functions dependencies.
-- Application/domain test sources compile against lightweight JUnit API stubs, validating updated signatures.
-- Source smoke for Specs 01-05 passed in memory mode, including Spec 05 policy/reference/prevalidation and stale-original blocking.
-- OpenAPI YAML parses successfully as version 0.9.0 with 17 paths.
-- No new canonical INSERT/UPDATE/DELETE/DDL was introduced.
-
-## Build artifacts
-
-Do not deploy pre-existing `target/` artifacts from a source handoff. Rebuild cleanly in an environment with Maven:
+Generated `target/` directories are not canonical source and should not be committed or used as proof of the current build. Rebuild from source in the normal Maven environment:
 
 ```bash
 rm -rf target */target
 mvn clean verify
 ```
-
-# Specs 06-07 final implementation checkpoint
-
-## Corrections found
-
-- The integrated handoff was missing `application/.../GetMassPerformanceReferenceUseCase.java` even though `OeeValidationService` and runtime wiring referenced it. A clean Java 21 compilation therefore failed until the interface was restored. Existing `target/` outputs could hide this problem; they remain non-canonical build artifacts.
-
-## Spec 06
-
-Implemented without inventing functional values:
-
-- `OPERATIVE` requires cause + action plan; `SYSTEM` requires incident number.
-- Required text is normalized and incompatible fields are discarded when reason changes.
-- Optional maximum lengths are configurable and enforced in Unicode code points.
-- Optional incident regex is configurable and enforced locally.
-- Missing limits/regex remain visible as pending definitions instead of silently imposing arbitrary rules.
-- GB Support online validation, sensitive-data policy and durable atomic persistence remain external/open.
-
-## Spec 07
-
-Implemented/prepared as far as possible without validation persistence:
-
-- `tid + oid` remains the immutable external actor identity.
-- PostgreSQL/Lakebase resolves existing `app_security.user_identity.user_id` plus display/email/active snapshots read-only.
-- Evidence prefers canonical identity snapshots and falls back to authentication claims.
-- Absolute event time remains `Instant`/UTC.
-- Historical durability, retention and cross-module reconciliation require the future KPI validation persistence/workflow.
-
-## Validation performed
-
-- Core modules: clean direct Java 21 compile passed.
-- App Service: direct Java 21 compile passed against dependencies extracted from the existing Boot artifact.
-- Functions: source compile passed with temporary core-host API stubs plus the packaged annotation/dependency jars.
-- Domain/application test sources: compile passed using lightweight JUnit API stubs.
-- Spec 06 runtime smoke: configured max lengths + incident regex enforced; invalid incident blocked.
-- Spec 07 runtime smoke: canonical user id/name/email/active snapshot takes precedence over token snapshots and the event instant is preserved.
-- OpenAPI YAML parses as `0.10.0` with 17 paths.
-- No canonical database writes or DDL were added.
-
-
-## Specs 06-07 current canonical pass
-
-- OEE and stop-time validations persist Spec 06 evidence atomically using existing canonical columns.
-- Persisted OEE/stop-time reads now return Spec 07 canonical actor/timestamp evidence.
-- Exact historical display-name/email snapshots are not representable in the current schema; immutable ids and `proposed_at` remain durable.
-- The previous Spec 05 non-canonical mass-detail table assumption has been removed.
-
-
-## Spec 06 closed
-Spec 06 is closed in this service with fixed text limits and capture-only GB Support incident semantics. No database changes are required. Approval comments and online GB Support verification remain outside this microservice.

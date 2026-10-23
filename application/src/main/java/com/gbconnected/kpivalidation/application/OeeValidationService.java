@@ -1104,7 +1104,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 new CapabilityView("massPerformanceNumericValidation", "IMPLEMENTED",
                         "Spec 05 accepts canonical decimal zero/positive values, rejects negatives, and requires a canonical UOM with dimension_code=MASS"),
                 new CapabilityView("massPerformanceVariableEnablement", "IMPLEMENTED_SEMANTIC_CODES",
-                        "ELABORATED_MASS and DELIVERED_MASS are explicit variables; derived metric codes are configurable through GBC_ELABORATED_MASS_METRIC_CODE and GBC_DELIVERED_MASS_METRIC_CODE"),
+                        "ELABORATED_MASS and DELIVERED_MASS are explicit variables mapped to canonical kpi.metric_definition codes configured through GBC_ELABORATED_MASS_METRIC_CODE and GBC_DELIVERED_MASS_METRIC_CODE"),
                 new CapabilityView("massPerformancePersistence", "IMPLEMENTED_METRIC_DEFINITION_ID", "Spec 05 persists PENDING proposals through kpi.kpi_validation_detail.metric_definition_id using the canonical metric catalog"),
                 new CapabilityView("massPerformanceMissingOriginal", "IMPLEMENTED_CONSERVATIVE",
                         "A missing canonical source row is not converted to zero because Spec 05 is a correction flow rather than KPI Manual capture-from-zero"),
