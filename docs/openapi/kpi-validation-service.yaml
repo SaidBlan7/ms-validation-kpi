@@ -1,9 +1,80 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.12.0
-  description: Specs 01-07 service aligned with the current canonical database. Spec 01 persists OEE validation proposals as PENDING and Spec 02 administers plant-specific KPI validator assignments canonically; Approval KPI remains a separate dependency.
+  version: 0.13.0
+  description: Specs 01-07 KPI Validation plus KPI Manuales Spec 01. Manual capture is isolated from Validation/Approval KPI; memory persistence is complete while PostgreSQL remains fail-closed until the canonical Manual KPI business entity exists.
 paths:
+  /api/v1/manual-kpis/policy:
+    get:
+      summary: Returns KPI Manuales Spec 01 policy and readiness
+      responses:
+        '200': { description: Manual KPI policy }
+  /api/v1/manual-kpis:
+    get:
+      summary: Gets one manual daily KPI record
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: businessDate, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Manual KPI record }
+        '401': { description: Authentication required }
+        '403': { description: Plant/line/capability scope denied }
+        '404': { description: Manual KPI record not found }
+    put:
+      summary: Creates or updates the daily Manual KPI capture inside the 8-hour edit window
+      description: Validates 96-hour plant-local history, canonical scope/catalogs, feature activation and non-negative values. Automatic data has precedence downstream while the manual record remains traceable. PostgreSQL/Lakebase returns 503 until Data provides the canonical Manual KPI persistence entity; memory mode is fully operational.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plantId, lineId, businessDate]
+              properties:
+                plantId: { type: integer, format: int64 }
+                lineId: { type: integer, format: int64 }
+                businessDate: { type: string, format: date }
+                oee:
+                  type: object
+                  properties:
+                    stopTimes:
+                      type: array
+                      items:
+                        type: object
+                        required: [stopClassificationId, seconds]
+                        properties:
+                          stopClassificationId: { type: integer, format: int64 }
+                          seconds: { type: integer, format: int64, minimum: 0 }
+                    performance:
+                      type: array
+                      items:
+                        type: object
+                        required: [metricDefinitionId, value, uomId]
+                        properties:
+                          metricDefinitionId: { type: integer, format: int64 }
+                          value: { type: number, minimum: 0 }
+                          uomId: { type: integer, format: int64 }
+                waste:
+                  type: object
+                  properties:
+                    entries:
+                      type: array
+                      items:
+                        type: object
+                        required: [wasteClassificationId, kilograms]
+                        properties:
+                          wasteClassificationId: { type: integer, format: int64 }
+                          wasteSubclassificationId: { type: integer, format: int64, nullable: true }
+                          kilograms: { type: number, minimum: 0 }
+                    producedTonnes: { type: number, minimum: 0 }
+      responses:
+        '200': { description: Manual KPI record created or updated }
+        '400': { description: Invalid request }
+        '401': { description: Authentication required }
+        '403': { description: Plant/line/capability scope denied }
+        '422': { description: Business rule violation, including expired edit window }
+        '503': { description: Canonical Manual KPI persistence is not yet available in PostgreSQL/Lakebase }
   /api/v1/oee-validation/capabilities:
     get:
       summary: Shows implemented and pending KPI Validation capabilities
@@ -13,11 +84,7 @@ paths:
   /api/v1/oee-validation/justification/policy:
     get:
       summary: Returns the current Spec 06 justification policy
-      description: >-
-        Declares the closed Spec 06 reason/evidence policy: OPERATIVE requires cause and action plan;
-        SYSTEM requires an incident number. Incident numbers are normalized single-line text up to 200 Unicode
-        characters; cause and action plan are normalized text up to 2000 Unicode characters each. No incident regex
-        or online GB Support validation is applied by this service.
+      description: Declares allowed reasons and required evidence. Optional per-field maximum lengths and an optional incident regex are enforced when configured; GB Support online validation and sensitive-data policy remain pending.
       responses:
         '200': { description: Justification policy }
         '401': { description: Authentication required }
@@ -311,11 +378,7 @@ paths:
   /api/v1/oee-validation/masses/policy:
     get:
       summary: Returns the current Spec 05 mass-performance validation policy
-      description: >-
-        Declares the closed Spec 05 mass-validation policy: ELABORATED_MASS is sourced from
-        scheduling.batch_execution; DELIVERED_MASS is sourced from scheduling.finished_product_output and canonical
-        packaging conversion when conversion to a MASS UOM is required. Persistence uses
-        kpi.kpi_validation_detail.metric_definition_id and the configured canonical metric_definition codes.
+      description: Declares source mode, configurable semantic derived-metric codes, line/date/variable/UOM aggregate identity, canonical MASS-UOM rule, server-side original reconciliation, scheduling fallback status, and the functional rules still pending definition/persistence.
       responses:
         '200': { description: Mass-performance policy }
         '401': { description: Authentication required }

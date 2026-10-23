@@ -6,9 +6,13 @@ import com.gbconnected.kpivalidation.adapter.memory.InMemoryMassPerformanceRefer
 import com.gbconnected.kpivalidation.adapter.memory.InMemoryOeeMetricSourceAdapter;
 import com.gbconnected.kpivalidation.adapter.memory.InMemoryActorIdentityAdapter;
 import com.gbconnected.kpivalidation.adapter.memory.InMemoryValidationPersistenceAdapter;
+import com.gbconnected.kpivalidation.adapter.memory.manual.*;
 import com.gbconnected.kpivalidation.adapter.postgres.*;
+import com.gbconnected.kpivalidation.adapter.postgres.manual.*;
 import com.gbconnected.kpivalidation.application.*;
 import com.gbconnected.kpivalidation.application.port.out.*;
+import com.gbconnected.kpivalidation.application.manual.*;
+import com.gbconnected.kpivalidation.application.port.out.manual.*;
 import com.gbconnected.kpivalidation.domain.CorrectionReasonPolicy;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Clock;
@@ -18,11 +22,13 @@ import javax.sql.DataSource;
 public final class MicroserviceRuntime implements AutoCloseable {
     private final OeeValidationService validation;
     private final DatabaseHealthPort health;
+    private final ManualKpiUseCase manualKpis;
     private final AutoCloseable closeable;
 
-    private MicroserviceRuntime(OeeValidationService validation, DatabaseHealthPort health, AutoCloseable closeable) {
+    private MicroserviceRuntime(OeeValidationService validation, DatabaseHealthPort health, ManualKpiUseCase manualKpis, AutoCloseable closeable) {
         this.validation = validation;
         this.health = health;
+        this.manualKpis = manualKpis;
         this.closeable = closeable;
     }
 
@@ -38,6 +44,10 @@ public final class MicroserviceRuntime implements AutoCloseable {
         ValidationPersistencePort validationPersistence;
         FeatureActivationPort featureActivation;
         ValidatorAssignmentAdministrationPort assignmentAdministration = ValidatorAssignmentAdministrationPort.unavailable();
+        ManualKpiAuthorizationPort manualAuthorization;
+        ManualKpiReferencePort manualReferences;
+        ManualKpiPersistencePort manualPersistence;
+        FeatureActivationPort manualFeatureActivation;
         AutoCloseable close = () -> { };
         DataSource sqlDataSource = null;
         String massSourceMode = env.getOrDefault("GBC_MASS_PERFORMANCE_SOURCE_MODE", "AUTO");
@@ -61,6 +71,11 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 actorIdentity = new InMemoryActorIdentityAdapter(tenant, user, Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")));
                 validationPersistence = new InMemoryValidationPersistenceAdapter();
                 featureActivation = FeatureActivationPort.enabledByDefault(env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
+                String manualCapability = env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY");
+                manualAuthorization = new InMemoryManualKpiAuthorizationAdapter(tenant, user, plant, manualCapability);
+                manualReferences = new InMemoryManualKpiReferenceAdapter();
+                manualPersistence = new InMemoryManualKpiPersistenceAdapter();
+                manualFeatureActivation = FeatureActivationPort.enabledByDefault(env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
             }
             case "postgres-password" -> {
                 HikariDataSource ds = PooledDataSourceFactory.createPasswordDataSource(settings);
@@ -74,6 +89,10 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
                 validationPersistence = new JdbcValidationPersistenceAdapter(ds, elaboratedMetricCode, deliveredMetricCode);
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
+                manualAuthorization = new JdbcManualKpiAuthorizationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"));
+                manualReferences = new JdbcManualKpiReferenceAdapter(ds);
+                manualPersistence = ManualKpiPersistencePort.unavailable("CANONICAL_STORAGE_PENDING_DATA_MODEL");
+                manualFeatureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
                 close = ds;
                 sqlDataSource = ds;
             }
@@ -89,6 +108,10 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
                 validationPersistence = new JdbcValidationPersistenceAdapter(ds, elaboratedMetricCode, deliveredMetricCode);
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
+                manualAuthorization = new JdbcManualKpiAuthorizationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"));
+                manualReferences = new JdbcManualKpiReferenceAdapter(ds);
+                manualPersistence = ManualKpiPersistencePort.unavailable("CANONICAL_STORAGE_PENDING_DATA_MODEL");
+                manualFeatureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
                 close = ds;
                 sqlDataSource = ds;
             }
@@ -136,7 +159,10 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 new PreviousLocalCalendarDayPolicy(),
                 Clock.systemUTC(),
                 role);
-        return new MicroserviceRuntime(service, health, close);
+        ManualKpiService manualService = new ManualKpiService(
+                access, context, actorIdentity, manualFeatureActivation, manualAuthorization, manualReferences,
+                manualPersistence, Clock.systemUTC());
+        return new MicroserviceRuntime(service, health, manualService, close);
     }
 
     public CheckEligibilityUseCase eligibility() { return validation; }
@@ -163,6 +189,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
     public GetAuditPolicyUseCase auditPolicy() { return validation; }
     public GetWorkflowPolicyUseCase workflowPolicy() { return validation; }
     public DatabaseHealthPort health() { return health; }
+    public ManualKpiUseCase manualKpis() { return manualKpis; }
 
     private static int optionalNonNegativeInt(Map<String, String> env, String key) {
         String raw = env.get(key);

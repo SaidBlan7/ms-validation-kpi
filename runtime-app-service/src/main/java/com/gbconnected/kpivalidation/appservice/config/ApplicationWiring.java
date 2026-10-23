@@ -2,6 +2,7 @@ package com.gbconnected.kpivalidation.appservice.config;
 
 import com.gbconnected.kpivalidation.application.*;
 import com.gbconnected.kpivalidation.application.port.out.DatabaseHealthPort;
+import com.gbconnected.kpivalidation.application.manual.ManualKpiUseCase;
 import com.gbconnected.kpivalidation.bootstrap.MicroserviceRuntime;
 import org.springframework.context.annotation.*;
 
@@ -34,4 +35,5 @@ public class ApplicationWiring {
     @Bean GetAuditPolicyUseCase auditPolicy(MicroserviceRuntime runtime) { return runtime.auditPolicy(); }
     @Bean GetWorkflowPolicyUseCase workflowPolicy(MicroserviceRuntime runtime) { return runtime.workflowPolicy(); }
     @Bean DatabaseHealthPort databaseHealth(MicroserviceRuntime runtime) { return runtime.health(); }
+    @Bean ManualKpiUseCase manualKpis(MicroserviceRuntime runtime) { return runtime.manualKpis(); }
 }

@@ -61,6 +61,37 @@ public final class JdbcFeatureActivationAdapter implements FeatureActivationPort
         }
     }
 
+    @Override
+    public boolean enabledForScope(long plantId, long lineId) {
+        if (plantId <= 0 || lineId <= 0) return false;
+        String sql = """
+                SELECT ca.boolean_value
+                  FROM configuration.configuration_definition cd
+                  JOIN configuration.configuration_assignment ca
+                    ON ca.configuration_definition_id = cd.configuration_definition_id
+                 WHERE cd.configuration_code = ?
+                   AND cd.is_active = TRUE
+                   AND ca.boolean_value IS NOT NULL
+                   AND ca.valid_from <= CURRENT_TIMESTAMP
+                   AND (ca.valid_to IS NULL OR ca.valid_to > CURRENT_TIMESTAMP)
+                   AND (
+                        ca.line_id = ?
+                        OR (ca.line_id IS NULL AND ca.plant_id = ?)
+                        OR (ca.organization_id IS NULL AND ca.plant_id IS NULL AND ca.line_id IS NULL
+                            AND ca.product_id IS NULL AND ca.dough_id IS NULL AND ca.machine_id IS NULL)
+                   )
+                 ORDER BY CASE WHEN ca.line_id = ? THEN 0 WHEN ca.plant_id = ? THEN 1 ELSE 2 END,
+                          ca.valid_from DESC, ca.configuration_assignment_id DESC
+                 LIMIT 1
+                """;
+        try (Connection c = dataSource.getConnection(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setString(1, code); p.setLong(2, lineId); p.setLong(3, plantId); p.setLong(4, lineId); p.setLong(5, plantId);
+            try (ResultSet r = p.executeQuery()) { return r.next() && r.getBoolean(1); }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Unable to resolve scoped feature flag", ex);
+        }
+    }
+
     @Override public String source() { return "configuration.configuration_definition+configuration_assignment"; }
     @Override public String configurationCode() { return code; }
 }

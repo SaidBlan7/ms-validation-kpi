@@ -49,6 +49,27 @@ public final class JdbcOperationalContextAdapter implements AccessScopePort, Ope
     }
 
     @Override
+    public boolean hasLineAccess(UUID tenantId, UUID objectId, long lineId) {
+        String sql = """
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM app_security.user_identity u
+                      JOIN app_security.user_line_access a ON a.user_id = u.user_id
+                     WHERE u.entra_tenant_id = ?
+                       AND u.entra_object_id = ?
+                       AND u.is_active = TRUE
+                       AND a.line_id = ?
+                       AND a.valid_from <= CURRENT_TIMESTAMP
+                       AND (a.valid_to IS NULL OR a.valid_to > CURRENT_TIMESTAMP)
+                )
+                """;
+        try (Connection c = dataSource.getConnection(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setObject(1, tenantId); p.setObject(2, objectId); p.setLong(3, lineId);
+            try (ResultSet r = p.executeQuery()) { return r.next() && r.getBoolean(1); }
+        } catch (SQLException e) { throw new IllegalStateException("Unable to validate line access", e); }
+    }
+
+    @Override
     public Optional<PlantContext> findPlant(long plantId) {
         String sql = "SELECT plant_id, timezone_name, is_active FROM core.plant WHERE plant_id=?";
         try (Connection c = dataSource.getConnection(); PreparedStatement p = c.prepareStatement(sql)) {

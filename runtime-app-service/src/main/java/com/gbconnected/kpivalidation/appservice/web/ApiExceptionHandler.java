@@ -5,6 +5,8 @@ import com.gbconnected.kpivalidation.application.ValidationAlreadyExistsExceptio
 import com.gbconnected.kpivalidation.application.ValidationNotFoundException;
 import com.gbconnected.kpivalidation.application.ValidatorAssignmentConflictException;
 import com.gbconnected.kpivalidation.domain.DomainValidationException;
+import com.gbconnected.kpivalidation.application.manual.ManualKpiNotFoundException;
+import com.gbconnected.kpivalidation.application.manual.ManualKpiStorageUnavailableException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,8 +38,13 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", safe(e.getMessage())));
     }
 
-    @ExceptionHandler(ValidationNotFoundException.class)
-    ResponseEntity<Map<String,String>> notFound(ValidationNotFoundException e) {
+    @ExceptionHandler(ManualKpiStorageUnavailableException.class)
+    ResponseEntity<Map<String,String>> manualStorage(ManualKpiStorageUnavailableException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", safe(e.getMessage())));
+    }
+
+    @ExceptionHandler({ValidationNotFoundException.class, ManualKpiNotFoundException.class})
+    ResponseEntity<Map<String,String>> notFound(RuntimeException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", safe(e.getMessage())));
     }
 

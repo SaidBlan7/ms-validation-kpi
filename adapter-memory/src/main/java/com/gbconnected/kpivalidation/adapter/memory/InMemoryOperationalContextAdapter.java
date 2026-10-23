@@ -8,6 +8,7 @@ public final class InMemoryOperationalContextAdapter implements AccessScopePort,
         this.tenantId=tenantId; this.objectId=objectId; this.plantId=plantId; this.lineId=lineId; this.timezone=timezone;
     }
     @Override public boolean hasPlantAccess(UUID tenant, UUID object, long plant) { return tenantId.equals(tenant)&&objectId.equals(object)&&plantId==plant; }
+    @Override public boolean hasLineAccess(UUID tenant, UUID object, long line) { return tenantId.equals(tenant)&&objectId.equals(object)&&lineId==line; }
     @Override public Optional<PlantContext> findPlant(long plant) { return plantId==plant?Optional.of(new PlantContext(plantId,timezone,true)):Optional.empty(); }
     @Override public boolean lineBelongsToPlant(long line,long plant) { return plantId==plant&&lineId==line; }
     @Override public boolean healthy() { return true; }
