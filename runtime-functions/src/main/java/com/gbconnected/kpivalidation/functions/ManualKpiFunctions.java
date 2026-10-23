@@ -17,6 +17,18 @@ public class ManualKpiFunctions {
         return json(req,HttpStatus.OK,FunctionRuntime.RUNTIME.manualKpis().policy(),correlation(req));
     }
 
+    @FunctionName("manual-kpi-date-selection")
+    public HttpResponseMessage dateSelection(@HttpTrigger(name="req", methods={HttpMethod.GET}, route="v1/manual-kpis/date-selection", authLevel=AuthorizationLevel.FUNCTION) HttpRequestMessage<Optional<String>> req, ExecutionContext ctx){
+        String corr=correlation(req);
+        try {
+            ActorContext actor=FunctionActorContextResolver.resolve(req);
+            long plant=requiredLong(req.getQueryParameters().get("plantId"),"plantId");
+            long line=requiredLong(req.getQueryParameters().get("lineId"),"lineId");
+            LocalDate date=LocalDate.parse(required(req.getQueryParameters().get("businessDate"),"businessDate"));
+            return json(req,HttpStatus.OK,FunctionRuntime.RUNTIME.manualKpis().dateSelection(actor,plant,line,date),corr);
+        } catch(SecurityException e){return reject(req,HttpStatus.UNAUTHORIZED,e,corr);} catch(AuthorizationException e){return reject(req,HttpStatus.FORBIDDEN,e,corr);} catch(Exception e){return reject(req,HttpStatus.BAD_REQUEST,e,corr);}
+    }
+
     @FunctionName("manual-kpi-get")
     public HttpResponseMessage get(@HttpTrigger(name="req", methods={HttpMethod.GET}, route="v1/manual-kpis", authLevel=AuthorizationLevel.FUNCTION) HttpRequestMessage<Optional<String>> req, ExecutionContext ctx){
         String corr=correlation(req);

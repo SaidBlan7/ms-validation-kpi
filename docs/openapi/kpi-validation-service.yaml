@@ -1,14 +1,27 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.14.0
-  description: Specs 01-07 KPI Validation plus KPI Manuales Specs 01-02. Manual capture is isolated from Validation/Approval KPI; Spec 02 scope/assignment uses canonical security history while Spec 01 PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
+  version: 0.15.0
+  description: Specs 01-07 KPI Validation plus KPI Manuales Specs 01-03. Manual capture is isolated from Validation/Approval KPI; Spec 02 scope/assignment uses canonical security history, Spec 03 defines the exact plant-local rolling 96-hour date-selection policy, and Spec 01 PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
 paths:
   /api/v1/manual-kpis/policy:
     get:
       summary: Returns KPI Manuales Spec 01 policy and readiness
       responses:
         '200': { description: Manual KPI policy }
+  /api/v1/manual-kpis/date-selection:
+    get:
+      summary: Evaluates whether a plant-local business date is selectable for a new Manual KPI capture
+      description: Uses the plant-local start of businessDate as the reference instant. The inclusive rolling window is exactly 96 hours. Weekends and holidays are not filtered. OEE uses a fixed 24-hour interval from the resolved plant-local day start, including DST transition dates. This endpoint does not require Manual KPI capture persistence to exist.
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: businessDate, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Date selection decision, including target 24-hour period and window boundaries }
+        '401': { description: Authentication required }
+        '403': { description: Plant/line/capability scope denied }
+        '400': { description: Invalid plant/line/date or timezone data }
   /api/v1/manual-kpis:
     get:
       summary: Gets one manual daily KPI record
@@ -23,7 +36,7 @@ paths:
         '404': { description: Manual KPI record not found }
     put:
       summary: Creates or updates the daily Manual KPI capture inside the 8-hour edit window
-      description: Validates 96-hour plant-local history, canonical scope/catalogs, feature activation and non-negative values. Automatic data has precedence downstream while the manual record remains traceable. PostgreSQL/Lakebase returns 503 until Data provides the canonical Manual KPI persistence entity; memory mode is fully operational.
+      description: For a new daily record, validates the exact inclusive 96-hour plant-local date-selection window plus canonical scope/catalogs, feature activation and non-negative values. For an existing record, the independent 8-hour window from first save remains authoritative even if the business date has since crossed outside the 96-hour selection window. Automatic data has precedence downstream while the manual record remains traceable. PostgreSQL/Lakebase returns 503 until Data provides the canonical Manual KPI persistence entity; memory mode is fully operational.
       requestBody:
         required: true
         content:

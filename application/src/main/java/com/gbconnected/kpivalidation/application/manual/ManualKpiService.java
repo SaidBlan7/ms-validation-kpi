@@ -4,13 +4,15 @@ import com.gbconnected.kpivalidation.application.*;
 import com.gbconnected.kpivalidation.application.port.out.*;
 import com.gbconnected.kpivalidation.application.port.out.manual.*;
 import com.gbconnected.kpivalidation.domain.DomainValidationException;
+import com.gbconnected.kpivalidation.domain.manual.ManualKpiDatePolicy;
+import com.gbconnected.kpivalidation.domain.manual.ManualKpiDateSelection;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
 
 public final class ManualKpiService implements ManualKpiUseCase {
-    private static final int HISTORY_HOURS = 96;
     private static final int EDIT_HOURS = 8;
+    private final ManualKpiDatePolicy datePolicy = new ManualKpiDatePolicy();
     private final AccessScopePort access;
     private final OperationalContextPort context;
     private final ActorIdentityPort identities;
@@ -28,10 +30,16 @@ public final class ManualKpiService implements ManualKpiUseCase {
     }
 
     @Override public ManualKpiPolicyView policy() {
-        return new ManualKpiPolicyView(HISTORY_HOURS, EDIT_HOURS, "PLANT_LOCAL_DATE_START_WITHIN_ROLLING_96_HOURS",
-                "ABSOLUTE_8_HOURS_FROM_FIRST_SAVE", "AUTOMATIC_WINS_MANUAL_RETAINED_FOR_TRACEABILITY",
-                "HISTORICAL_READ_ONLY_AFTER_DEACTIVATION", activation.configurationCode(), authorization.capabilityCode(),
-                persistence.available(), persistence.source());
+        return new ManualKpiPolicyView(ManualKpiDatePolicy.HISTORY_HOURS, EDIT_HOURS, ManualKpiDatePolicy.OEE_PERIOD_HOURS,
+                "PLANT_LOCAL_DATE_START_WITHIN_EXACT_ROLLING_96_HOURS", true, true, true, false,
+                "FIXED_24_HOUR_INTERVAL_FROM_PLANT_LOCAL_DAY_START", "ABSOLUTE_8_HOURS_FROM_FIRST_SAVE", true,
+                "AUTOMATIC_WINS_MANUAL_RETAINED_FOR_TRACEABILITY", "HISTORICAL_READ_ONLY_AFTER_DEACTIVATION",
+                activation.configurationCode(), authorization.capabilityCode(), persistence.available(), persistence.source());
+    }
+
+    @Override public ManualKpiDateSelection dateSelection(ActorContext actor,long plantId,long lineId,LocalDate businessDate) {
+        PlantContext plant = authorizeScope(actor, plantId, lineId, true);
+        return datePolicy.evaluate(businessDate, zone(plant.timezoneName()), clock.instant());
     }
 
     @Override public ManualKpiRecord get(ActorContext actor,long plantId,long lineId,LocalDate businessDate) {
@@ -48,13 +56,15 @@ public final class ManualKpiService implements ManualKpiUseCase {
         validatePayload(command);
         ZoneId zone = zone(plant.timezoneName());
         Instant now = clock.instant();
-        Instant targetStart = command.businessDate().atStartOfDay(zone).toInstant();
-        Instant currentLocalDayStart = ZonedDateTime.ofInstant(now, zone).toLocalDate().atStartOfDay(zone).toInstant();
-        if (targetStart.isAfter(currentLocalDayStart)) throw new DomainValidationException("businessDate cannot be in the future");
-        if (targetStart.isBefore(now.minus(Duration.ofHours(HISTORY_HOURS)))) throw new DomainValidationException("businessDate is outside the 96-hour historical window");
         long userId = canonicalUser(actor);
         Optional<ManualKpiRecord> existing = persistence.find(command.plantId(), command.lineId(), command.businessDate());
-        if (existing.isEmpty()) return persistence.create(command, plant.timezoneName(), userId, now, now.plus(Duration.ofHours(EDIT_HOURS)), correlationId);
+        if (existing.isEmpty()) {
+            ManualKpiDateSelection selection = datePolicy.evaluate(command.businessDate(), zone, now);
+            if (!selection.selectable()) throw new DomainValidationException(selection.message());
+            return persistence.create(command, plant.timezoneName(), userId, now, now.plus(Duration.ofHours(EDIT_HOURS)), correlationId);
+        }
+        // Spec 03: once created while selectable, the independent 8-hour edit window governs updates.
+        // Crossing the 96-hour selection boundary does not truncate an already-open edit window.
         if (!existing.get().editableAt(now)) throw new DomainValidationException("Manual KPI record is locked because the 8-hour edit window expired");
         return persistence.update(existing.get(), command, userId, now, correlationId);
     }

@@ -15,7 +15,7 @@ Implementada sobre el modelo canónico existente, sin cambios de esquema.
 - `GET /api/v1/manual-kpis/scope/me`: plantas y líneas efectivas del actor.
 - `GET /api/v1/manual-kpis/scope/policy`: decisiones operativas aplicadas por el micro.
 - `GET /api/v1/manual-kpis/scope/admin/assignments?plantId=`: historial de asignaciones de planta.
-- `POST /api/v1/manual-kpis/scope/admin/assignments`: alta de acceso de planta.
+- `POST /api/v1/manual-kpis/scope/admin/assignments`: alta de alcance específico de KPI Manuales para una planta; no crea `user_plant_access` general.
 - `DELETE /api/v1/manual-kpis/scope/admin/assignments`: retiro temporal/histórico mediante `valid_to`.
 - Equivalentes Azure Functions incluidos.
 
@@ -46,3 +46,4 @@ Si negocio exige una aprobación/visto bueno formal antes de otorgar acceso, esa
 
 ## Relación con Spec 01
 La captura de KPI Manuales continúa bloqueada en PostgreSQL únicamente por la persistencia canónica faltante de la propia captura diaria (pendiente de Spec 01). La selección/autorización de planta y línea de esta Spec 02 sí queda resuelta contra PostgreSQL canónico.
+

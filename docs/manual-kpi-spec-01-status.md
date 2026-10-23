@@ -9,9 +9,9 @@ Reglas implementadas:
 - Feature flag canónico por planta/línea mediante `configuration.configuration_definition` + `configuration.configuration_assignment` (`KPI_MANUAL_ENTRY_ENABLED` por defecto).
 - Autenticación Entra y autorización canónica por capability (`KPI_MANUAL_ENTRY` por defecto), además de `user_plant_access` y `user_line_access` vigentes.
 - Validación de pertenencia línea-planta y uso de `core.plant.timezone_name` como zona horaria autoritativa.
-- Ventana histórica de 96 horas calculada desde el inicio local de `businessDate` contra el instante actual.
+- Ventana histórica de 96 horas exactas e inclusivas calculada desde el inicio local de `businessDate` contra el instante actual; esta regla aplica a nuevas capturas/selección.
 - Primera captura y posteriores modificaciones modeladas como un único registro diario versionado.
-- Ventana de edición de 8 horas absolutas desde el primer guardado; no se reinicia al editar y no cambia por medianoche/DST.
+- Ventana de edición de 8 horas absolutas desde el primer guardado; no se reinicia al editar, no cambia por medianoche/DST y puede continuar aunque `businessDate` cruce fuera de las 96 horas después de una creación válida.
 - Al vencer las 8 horas, el registro queda bloqueado para edición.
 - Desactivar el feature bloquea nuevas altas/ediciones, pero no elimina ni oculta históricos existentes.
 - Precedencia resuelta con criterio operacional: **AUTOMATIC_WINS**. Si posteriormente existe dato automático para el mismo alcance/fecha, el automático debe ser el valor efectivo de reporte y el manual debe conservarse como evidencia histórica.
@@ -21,11 +21,12 @@ Reglas implementadas:
 - Referencias se validan contra catálogos canónicos: `stops.stop_classification`, `kpi.metric_definition`, `core.unit_of_measure`, `waste.waste_classification` y `waste.waste_subclassification`.
 - El contrato de persistencia conserva actor canónico, creación, actualización, `editableUntil`, versión, correlación y eventos de auditoría CREATE/UPDATE.
 - Adapter `memory` queda funcional para pruebas locales end-to-end.
-- App Service y Azure Functions exponen política, consulta y guardado del módulo.
+- App Service y Azure Functions exponen política, evaluación de selección de fecha, consulta y guardado del módulo.
 
 ## Endpoints
 
 - `GET /api/v1/manual-kpis/policy`
+- `GET /api/v1/manual-kpis/date-selection?plantId={id}&lineId={id}&businessDate=YYYY-MM-DD`
 - `GET /api/v1/manual-kpis?plantId={id}&lineId={id}&businessDate=YYYY-MM-DD`
 - `PUT /api/v1/manual-kpis`
 
