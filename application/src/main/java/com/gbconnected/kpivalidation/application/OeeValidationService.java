@@ -828,21 +828,9 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "incidentNumber was discarded because OPERATIVE uses operationalCause and actionPlan as its evidence"));
             }
 
-            boolean relevantLengthUndefined = reasonType == ValidationReasonType.SYSTEM
-                    ? !correctionReasonPolicy.incidentLengthConfigured()
-                    : (!correctionReasonPolicy.operationalCauseLengthConfigured() || !correctionReasonPolicy.actionPlanLengthConfigured());
-            if (relevantLengthUndefined) {
-                issues.add(ValidationIssue.warning("JUSTIFICATION_TEXT_LENGTH_PENDING_DEFINITION",
-                        "At least one relevant Spec 06 UX maximum length is not configured; no arbitrary business maximum is imposed for that field"));
-            }
-            issues.add(ValidationIssue.warning("SENSITIVE_DATA_POLICY_PENDING_DEFINITION",
-                    "Spec 06 leaves the sensitive-data policy for free-text justification fields undefined; callers must avoid placing secrets or unnecessary personal data in these fields"));
-            if (reasonType == ValidationReasonType.SYSTEM && !correctionReasonPolicy.incidentRegexConfigured()) {
-                issues.add(ValidationIssue.warning("INCIDENT_FORMAT_AND_GB_SUPPORT_VALIDATION_PENDING",
-                        "incidentNumber is captured as non-blank text only because no incident regex/GB Support validation contract is configured"));
-            } else if (reasonType == ValidationReasonType.SYSTEM) {
-                issues.add(ValidationIssue.warning("GB_SUPPORT_VALIDATION_PENDING",
-                        "incidentNumber matches the configured local format, but online validation against GB Support remains unavailable"));
+            if (reasonType == ValidationReasonType.SYSTEM) {
+                issues.add(ValidationIssue.warning("GB_SUPPORT_CAPTURE_ONLY",
+                        "incidentNumber is stored as provided after normalization; online GB Support validation is intentionally outside this service until an approved integration contract exists"));
             }
 
             return new CorrectionJustificationView(normalized.type(), normalized.incidentNumber(),
@@ -932,11 +920,11 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 List.of("displayNameSnapshot", "principalNameSnapshot"),
                 "PREVALIDATION_USES_APP_SECURITY_THEN_AUTH_CLAIMS; PERSISTED_DETAIL_READS_CURRENT_APP_SECURITY_PROFILE",
                 "ABSOLUTE_INSTANT_UTC",
-                "PENDING_PRESENTATION_TIMEZONE_DEFINITION",
+                "PLANT_TIMEZONE_FROM_CORE_PLANT_TIMEZONE_NAME",
                 validationPersistence.available() ? "IMPLEMENTED_KPI_VALIDATION_AUDIT_TRIGGERS" : "UNAVAILABLE",
                 validationPersistence.available() ? "CANONICAL_USER_AND_TIMESTAMP_PERSISTED; DISPLAY_PROFILE_NOT_HISTORICALLY_SNAPSHOTTED" : "PREVALIDATION_ONLY",
-                "PENDING_DEFINITION",
-                "APPROVAL_AND_REPORTING_RECONCILIATION_OWNED_BY_DEPENDENT_MODULES");
+                "RETAIN_WITH_CANONICAL_VALIDATION_AND_AUDIT_RECORD_LIFECYCLE_NO_APP_DELETION",
+                "CANONICAL_USER_ID_AND_PROPOSED_AT_ARE_SHARED_RECONCILIATION_KEYS_FOR_APPROVAL_AND_REPORTING");
     }
 
     @Override
@@ -1015,26 +1003,20 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
 
     @Override
     public JustificationPolicyView getJustificationPolicy() {
-        boolean anyLength = correctionReasonPolicy.incidentLengthConfigured()
-                || correctionReasonPolicy.operationalCauseLengthConfigured()
-                || correctionReasonPolicy.actionPlanLengthConfigured();
-        boolean allLengths = correctionReasonPolicy.incidentLengthConfigured()
-                && correctionReasonPolicy.operationalCauseLengthConfigured()
-                && correctionReasonPolicy.actionPlanLengthConfigured();
         return new JustificationPolicyView(
                 List.of("OPERATIVE", "SYSTEM"),
                 List.of("operationalCause", "actionPlan"),
                 List.of("incidentNumber"),
                 "IMPLEMENTED_TRIM_LINE_ENDING_AND_CONTROL_CHARACTER_VALIDATION",
-                allLengths ? "CONFIGURED_AND_ENFORCED" : (anyLength ? "PARTIALLY_CONFIGURED_AND_ENFORCED" : "PENDING_UX_DEFINITION"),
+                "CLOSED_FIXED_LIMITS_ENFORCED",
                 correctionReasonPolicy.incidentNumberMaxLengthOrNull(),
                 correctionReasonPolicy.operationalCauseMaxLengthOrNull(),
                 correctionReasonPolicy.actionPlanMaxLengthOrNull(),
                 "UNICODE_CODE_POINTS",
-                correctionReasonPolicy.incidentRegexConfigured() ? "CONFIGURED_REGEX_ENFORCED" : "CAPTURE_ONLY_PATTERN_NOT_DEFINED",
-                correctionReasonPolicy.incidentNumberRegex(),
-                "PENDING_EXTERNAL_INTEGRATION",
-                "PENDING_DEFINITION",
+                "CLOSED_CAPTURE_ONLY_NO_REGEX",
+                null,
+                "CLOSED_CAPTURE_ONLY_NO_ONLINE_VALIDATION",
+                "CLOSED_MINIMIZE_FREE_TEXT_AND_NEVER_LOG_CONTENT",
                 validationPersistence.available() ? "IMPLEMENTED_CANONICAL_KPI_VALIDATION" : "UNAVAILABLE");
     }
 
@@ -1091,14 +1073,10 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                         "Only SYSTEM/OPERATIVE are accepted; SYSTEM requires incidentNumber, OPERATIVE requires cause/action plan, text is normalized and stale fields from a changed reason are discarded"),
                 new CapabilityView("justificationPersistence", validationPersistence.available() ? "IMPLEMENTED_CANONICAL" : "UNAVAILABLE",
                         "Reason type and applicable incident/cause/action-plan evidence are persisted atomically in kpi.kpi_validation"),
-                new CapabilityView("gbSupportIncidentValidation", correctionReasonPolicy.incidentRegexConfigured() ? "IMPLEMENTED_LOCAL_FORMAT_ONLY" : "PENDING_DEFINITION",
-                        correctionReasonPolicy.incidentRegexConfigured()
-                                ? "Configured incident regex is enforced locally; online validation against GB Support remains pending"
-                                : "Incident format and validation against GB Support remain undefined; the service captures any non-blank incidentNumber"),
-                new CapabilityView("justificationTextPolicy",
-                        (correctionReasonPolicy.incidentLengthConfigured() && correctionReasonPolicy.operationalCauseLengthConfigured() && correctionReasonPolicy.actionPlanLengthConfigured())
-                                ? "IMPLEMENTED_CONFIGURABLE_LENGTHS" : "IMPLEMENTED_PARTIAL",
-                        "Whitespace/line endings/control characters are normalized and optional per-field Unicode length limits are enforced when configured; sensitive-data policy remains undefined"),
+                new CapabilityView("gbSupportIncidentValidation", "CLOSED_CAPTURE_ONLY",
+                        "Spec 06 confirms incident capture only. The service stores a normalized non-blank incidentNumber up to 200 characters and does not pretend to validate it online against GB Support"),
+                new CapabilityView("justificationTextPolicy", "IMPLEMENTED_CLOSED_SPEC_06",
+                        "Whitespace/line endings/control characters are normalized; incidentNumber is limited to 200 Unicode code points and operationalCause/actionPlan to 2000 each; free-text content is never written to application logs"),
                 new CapabilityView("operationalMonitoring", "IMPLEMENTED",
                         "HTTP runtimes log critical consultations/actions and rejected requests with correlation and actor/scope when available"),
                 new CapabilityView("stopTimeReferenceByClassification", "IMPLEMENTED_CANONICAL",

@@ -1,3 +1,7 @@
+# Current closure status
+
+The current canonical implementation supersedes older incremental notes below where they conflict. Spec 06 is closed with fixed limits (incident 200, cause/action plan 2000), capture-only incident semantics, canonical atomic persistence for OEE/stop-time/mass proposals, and no application logging of full justification content. No Spec 06 database change is required.
+
 # Review checkpoint — Specs 01-05 on canonical v1.2
 
 ## Current source status
@@ -95,3 +99,7 @@ Implemented/prepared as far as possible without validation persistence:
 - Persisted OEE/stop-time reads now return Spec 07 canonical actor/timestamp evidence.
 - Exact historical display-name/email snapshots are not representable in the current schema; immutable ids and `proposed_at` remain durable.
 - The previous Spec 05 non-canonical mass-detail table assumption has been removed.
+
+
+## Spec 06 closed
+Spec 06 is closed in this service with fixed text limits and capture-only GB Support incident semantics. No database changes are required. Approval comments and online GB Support verification remain outside this microservice.

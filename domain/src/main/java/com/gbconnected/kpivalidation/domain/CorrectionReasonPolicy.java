@@ -4,9 +4,10 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 /**
- * Configurable technical policy for Spec 06 text fields.
- * A max length of 0 means the business/UX maximum is still undefined and is not enforced.
- * An empty incident regex means incident format remains capture-only.
+ * Closed technical policy for Spec 06 text fields.
+ * The service intentionally keeps incident validation capture-only until GB Support
+ * exposes an approved contract. Lengths are fixed here so all runtimes enforce the
+ * same behavior.
  */
 public record CorrectionReasonPolicy(
         int incidentNumberMaxLength,
@@ -23,11 +24,16 @@ public record CorrectionReasonPolicy(
             try {
                 Pattern.compile(incidentNumberRegex);
             } catch (PatternSyntaxException ex) {
-                throw new IllegalArgumentException("GBC_INCIDENT_NUMBER_REGEX is invalid", ex);
+                throw new IllegalArgumentException("incidentNumberRegex is invalid", ex);
             }
         }
     }
 
+    public static CorrectionReasonPolicy closedDefaults() {
+        return new CorrectionReasonPolicy(200, 2000, 2000, null);
+    }
+
+    /** Kept for compatibility with older tests/callers; closed flows should use closedDefaults(). */
     public static CorrectionReasonPolicy unbounded() {
         return new CorrectionReasonPolicy(0, 0, 0, null);
     }

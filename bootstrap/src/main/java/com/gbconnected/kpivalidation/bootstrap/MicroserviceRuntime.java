@@ -119,11 +119,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
             assignmentAdministration = new JdbcValidatorAssignmentAdministrationAdapter(assignmentDataSource, validatorRoleCode, validatorCapabilityCode, assignmentAdminCapabilityCode);
         }
 
-        CorrectionReasonPolicy correctionReasonPolicy = new CorrectionReasonPolicy(
-                optionalNonNegativeInt(env, "GBC_INCIDENT_NUMBER_MAX_LENGTH"),
-                optionalNonNegativeInt(env, "GBC_OPERATIONAL_CAUSE_MAX_LENGTH"),
-                optionalNonNegativeInt(env, "GBC_ACTION_PLAN_MAX_LENGTH"),
-                env.get("GBC_INCIDENT_NUMBER_REGEX"));
+        CorrectionReasonPolicy correctionReasonPolicy = CorrectionReasonPolicy.closedDefaults();
 
         OeeValidationService service = new OeeValidationService(
                 access,

@@ -398,17 +398,17 @@ class OeeValidationServiceTest {
     }
 
     @Test
-    void spec06ExposesPolicyWithoutInventingLengthOrIncidentFormat() {
+    void spec06ExposesClosedCaptureOnlyPolicy() {
         var policy = service(true).getJustificationPolicy();
         assertEquals(List.of("OPERATIVE", "SYSTEM"), policy.allowedReasonTypes());
-        assertEquals("PENDING_UX_DEFINITION", policy.textLengthPolicyState());
-        assertNull(policy.incidentNumberMaxLength());
-        assertNull(policy.operationalCauseMaxLength());
-        assertNull(policy.actionPlanMaxLength());
+        assertEquals("CLOSED_FIXED_LIMITS_ENFORCED", policy.textLengthPolicyState());
+        assertEquals(200, policy.incidentNumberMaxLength());
+        assertEquals(2000, policy.operationalCauseMaxLength());
+        assertEquals(2000, policy.actionPlanMaxLength());
         assertEquals("UNICODE_CODE_POINTS", policy.lengthUnit());
-        assertEquals("CAPTURE_ONLY_PATTERN_NOT_DEFINED", policy.incidentFormatValidationState());
+        assertEquals("CLOSED_CAPTURE_ONLY_NO_REGEX", policy.incidentFormatValidationState());
         assertNull(policy.incidentNumberRegex());
-        assertEquals("PENDING_EXTERNAL_INTEGRATION", policy.gbSupportValidationState());
+        assertEquals("CLOSED_CAPTURE_ONLY_NO_ONLINE_VALIDATION", policy.gbSupportValidationState());
     }
 
     @Test
@@ -472,7 +472,7 @@ class OeeValidationServiceTest {
         assertEquals("NOT_AVAILABLE_IN_CURRENT_ADAPTER", policy.canonicalUserLinkState());
         assertEquals("ENTRA_CLAIMS_ONLY", policy.canonicalUserIdentitySource());
         assertEquals("ABSOLUTE_INSTANT_UTC", policy.timestampSemantics());
-        assertEquals("PENDING_PRESENTATION_TIMEZONE_DEFINITION", policy.displayTimezoneState());
+        assertEquals("PLANT_TIMEZONE_FROM_CORE_PLANT_TIMEZONE_NAME", policy.displayTimezoneState());
         assertEquals("UNAVAILABLE", policy.persistenceState());
     }
 

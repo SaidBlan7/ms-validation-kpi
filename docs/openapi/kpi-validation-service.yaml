@@ -20,7 +20,7 @@ paths:
   /api/v1/oee-validation/audit/policy:
     get:
       summary: Returns the current Spec 07 validator/timestamp evidence policy
-      description: Uses Entra tid+oid as immutable actor identity and resolves app_security.user_identity.user_id in canonical DB modes. Spec 01 persists proposed_by_user_id/proposed_at and Spec 02 assignment writes feed audit.change_log through canonical triggers. Presentation timezone, retention and Approval/Reporting reconciliation remain pending.
+      description: Uses Entra tid+oid as immutable actor identity and resolves app_security.user_identity.user_id in canonical DB modes. Spec 01 persists proposed_by_user_id/proposed_at and Spec 02 assignment writes feed audit.change_log through canonical triggers. Presentation uses core.plant.timezone_name while preserving the absolute Instant. The service does not delete validation/audit evidence; Approval and Reporting reconcile the canonical proposed_by_user_id/proposed_at values.
       responses:
         '200': { description: Audit evidence policy }
         '401': { description: Authentication required }
@@ -172,9 +172,9 @@ paths:
                 metricCode: { type: string, description: Canonical kpi.kpi_definition.kpi_code; official OEE 1/OEE 2/full codes are not hardcoded }
                 proposedValue: { type: number }
                 reasonType: { type: string, enum: [OPERATIVE, SYSTEM], description: Only the two confirmed Spec 06 reasons are accepted }
-                incidentNumber: { type: string, description: Required only for SYSTEM; optional configured max length and regex are enforced server-side; online GB Support validation remains undefined }
-                operationalCause: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
-                actionPlan: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
+                incidentNumber: { type: string, description: Required only for SYSTEM; normalized single-line text, maximum 200 Unicode characters; capture-only, with no regex or online GB Support validation }
+                operationalCause: { type: string, description: Required only for OPERATIVE; normalized free text, maximum 2000 Unicode characters }
+                actionPlan: { type: string, description: Required only for OPERATIVE; normalized free text, maximum 2000 Unicode characters }
       responses:
         '200': { description: Prevalidation result }
         '400': { description: Invalid request }
@@ -257,9 +257,9 @@ paths:
                 originalSeconds: { type: integer, format: int64, minimum: 0, description: Must match the server-observed D-1 aggregate returned by /stop-times/reference }
                 proposedSeconds: { type: integer, format: int64, minimum: 0 }
                 reasonType: { type: string, enum: [OPERATIVE, SYSTEM], description: Only the two confirmed Spec 06 reasons are accepted }
-                incidentNumber: { type: string, description: Required only for SYSTEM; optional configured max length and regex are enforced server-side; online GB Support validation remains undefined }
-                operationalCause: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
-                actionPlan: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
+                incidentNumber: { type: string, description: Required only for SYSTEM; normalized single-line text, maximum 200 Unicode characters; capture-only, with no regex or online GB Support validation }
+                operationalCause: { type: string, description: Required only for OPERATIVE; normalized free text, maximum 2000 Unicode characters }
+                actionPlan: { type: string, description: Required only for OPERATIVE; normalized free text, maximum 2000 Unicode characters }
       responses:
         '200': { description: Stop-time correction prevalidation result }
         '400': { description: Invalid request }
@@ -344,9 +344,9 @@ paths:
                 originalValue: { type: number, minimum: 0, description: Must match the server-observed D-1 reference returned by /masses/reference }
                 proposedValue: { type: number, minimum: 0 }
                 reasonType: { type: string, enum: [OPERATIVE, SYSTEM], description: Only the two confirmed Spec 06 reasons are accepted }
-                incidentNumber: { type: string, description: Required only for SYSTEM; optional configured max length and regex are enforced server-side; online GB Support validation remains undefined }
-                operationalCause: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
-                actionPlan: { type: string, description: Required only for OPERATIVE; normalized and optional configured max length enforced }
+                incidentNumber: { type: string, description: Required only for SYSTEM; normalized single-line text, maximum 200 Unicode characters; capture-only, with no regex or online GB Support validation }
+                operationalCause: { type: string, description: Required only for OPERATIVE; normalized free text, maximum 2000 Unicode characters }
+                actionPlan: { type: string, description: Required only for OPERATIVE; normalized free text, maximum 2000 Unicode characters }
       responses:
         '200': { description: Mass correction prevalidation result }
         '400': { description: Invalid request }

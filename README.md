@@ -181,10 +181,11 @@ El único punto funcional de Spec 04 que permanece abierto es la fórmula exacta
 - Motivos permitidos: `OPERATIVE` y `SYSTEM`.
 - `OPERATIVE` exige `operationalCause` + `actionPlan`; `SYSTEM` exige `incidentNumber`.
 - La prevalidación devuelve `justification` normalizada y descarta campos del motivo anterior.
-- OEE general y tiempos de paro persisten motivo/causa/plan/incidente de forma atómica en `kpi.kpi_validation`.
-- `GET /api/v1/oee-validation/justification/policy` publica la matriz efectiva.
-- Longitudes y regex son opcionales/configurables; no sustituyen validación online contra GB Support.
-- Spec 05 conserva la justificación en prevalidación, pero su persistencia sigue bloqueada por el modelo canónico de masas.
+- OEE general, tiempos de paro y masas persisten motivo/causa/plan/incidente de forma atómica en `kpi.kpi_validation`.
+- Política cerrada: `incidentNumber` máximo 200 caracteres Unicode; `operationalCause` y `actionPlan` máximo 2,000 caracteres Unicode cada uno.
+- El incidente es **capture-only**: no se aplica regex ni se afirma validación online contra GB Support hasta que exista un contrato aprobado.
+- La aplicación no escribe causa, plan ni incidente completos en logs.
+- `GET /api/v1/oee-validation/justification/policy` publica esta matriz efectiva.
 
 ## Spec 07 - fecha, hora y usuario de la validación
 

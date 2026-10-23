@@ -1,4 +1,14 @@
 
+# Spec 07 closure
+
+- Spec 07 is closed: canonical actor is `proposed_by_user_id` + immutable Entra tenant/object identity.
+- `proposed_at` remains the absolute source-of-truth instant; presentation uses `core.plant.timezone_name`.
+- Standard display is name + corporate email when available plus canonical/immutable identifier.
+- Disabled accounts and later profile changes do not invalidate historical validation evidence.
+- The service does not delete validation/audit evidence; retention follows the canonical data lifecycle.
+- Approval KPI and reporting reconcile `kpi_validation_id`, `proposed_by_user_id` and `proposed_at`.
+- No schema changes were introduced.
+
 # Spec 03 — cierre definitivo
 
 - Se verificó el ZIP integrado y la implementación temporal ya estaba alineada con la definición cerrada.
@@ -141,8 +151,8 @@ No se agregan tablas, columnas ni escrituras a la BD canónica.
 
 # Specs 06-07 completion pass on v1.2
 
-- Spec 06 keeps the confirmed `OPERATIVE` / `SYSTEM` semantics and now supports optional configurable maximum lengths (`GBC_INCIDENT_NUMBER_MAX_LENGTH`, `GBC_OPERATIONAL_CAUSE_MAX_LENGTH`, `GBC_ACTION_PLAN_MAX_LENGTH`). Unset/`0` remains explicitly undefined rather than inventing a business limit.
-- Spec 06 supports optional `GBC_INCIDENT_NUMBER_REGEX`; when configured it is validated locally at runtime and exposed by `/justification/policy`. This is not represented as GB Support online validation.
+- [Historical, superseded by Spec 06 closure] Spec 06 previously supported optional configurable maximum lengths.
+- [Historical, superseded by Spec 06 closure] Spec 06 previously supported an optional local incident regex.
 - Spec 07 adds a read-only `JdbcActorIdentityAdapter` over `app_security.user_identity`, exposing `canonicalUserId`, canonical display/email snapshots, account-active snapshot and identity source in `auditEvidence` while preserving `tid/oid` as the external immutable identity.
 - Spec 07 snapshot precedence is canonical `app_security` data first, authentication claims second; the absolute timestamp remains UTC `Instant`.
 - Added missing `GetMassPerformanceReferenceUseCase.java`, which was referenced by source but absent from the uploaded ZIP and caused a clean source compilation failure.
@@ -164,3 +174,10 @@ No se agregan tablas, columnas ni escrituras a la BD canónica.
 - Elaborated mass now uses `scheduling.batch_execution`; delivered mass uses `scheduling.finished_product_output` with vigente `manufacturing.packaging_conversion` to MASS when required.
 - Added durable PENDING persistence, duplicate protection by line/date/metric/UOM, and canonical metric-definition resolution.
 - Removed the old derived-metric/provisional-fallback assumption for Spec 05.
+
+## Spec 06 closure
+- Closed justification policy: `SYSTEM` requires incidentNumber; `OPERATIVE` requires cause + action plan.
+- Fixed limits are now service policy: incident 200 Unicode chars, cause 2000, action plan 2000.
+- Removed environment-configurable Spec 06 length/regex knobs to avoid divergent runtime behavior.
+- Incident semantics are intentionally capture-only; no regex or online GB Support validation is claimed.
+- Removed pending-policy warnings for length/sensitive-data definition; application logs continue to exclude full free-text evidence.

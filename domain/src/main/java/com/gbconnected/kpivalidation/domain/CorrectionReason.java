@@ -17,7 +17,7 @@ public record CorrectionReason(
      * previous reason type.
      */
     public CorrectionReason normalized() {
-        return normalized(CorrectionReasonPolicy.unbounded());
+        return normalized(CorrectionReasonPolicy.closedDefaults());
     }
 
     public CorrectionReason normalized(CorrectionReasonPolicy policy) {
