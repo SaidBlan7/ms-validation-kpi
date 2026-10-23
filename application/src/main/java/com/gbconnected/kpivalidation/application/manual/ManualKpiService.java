@@ -6,6 +6,7 @@ import com.gbconnected.kpivalidation.application.port.out.manual.*;
 import com.gbconnected.kpivalidation.domain.DomainValidationException;
 import com.gbconnected.kpivalidation.domain.manual.ManualKpiDatePolicy;
 import com.gbconnected.kpivalidation.domain.manual.ManualKpiDateSelection;
+import com.gbconnected.kpivalidation.domain.manual.ManualStopTimePolicy;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
@@ -13,6 +14,7 @@ import java.util.*;
 public final class ManualKpiService implements ManualKpiUseCase {
     private static final int EDIT_HOURS = 8;
     private final ManualKpiDatePolicy datePolicy = new ManualKpiDatePolicy();
+    private final ManualStopTimePolicy stopTimePolicy = new ManualStopTimePolicy();
     private final AccessScopePort access;
     private final OperationalContextPort context;
     private final ActorIdentityPort identities;
@@ -33,6 +35,7 @@ public final class ManualKpiService implements ManualKpiUseCase {
         return new ManualKpiPolicyView(ManualKpiDatePolicy.HISTORY_HOURS, EDIT_HOURS, ManualKpiDatePolicy.OEE_PERIOD_HOURS,
                 "PLANT_LOCAL_DATE_START_WITHIN_EXACT_ROLLING_96_HOURS", true, true, true, false,
                 "FIXED_24_HOUR_INTERVAL_FROM_PLANT_LOCAL_DAY_START", "ABSOLUTE_8_HOURS_FROM_FIRST_SAVE", true,
+                ManualStopTimePolicy.CAPTURE_UNIT, ManualStopTimePolicy.DAILY_HOURS.intValueExact(), true,
                 "AUTOMATIC_WINS_MANUAL_RETAINED_FOR_TRACEABILITY", "HISTORICAL_READ_ONLY_AFTER_DEACTIVATION",
                 activation.configurationCode(), authorization.capabilityCode(), persistence.available(), persistence.source());
     }
@@ -40,6 +43,11 @@ public final class ManualKpiService implements ManualKpiUseCase {
     @Override public ManualKpiDateSelection dateSelection(ActorContext actor,long plantId,long lineId,LocalDate businessDate) {
         PlantContext plant = authorizeScope(actor, plantId, lineId, true);
         return datePolicy.evaluate(businessDate, zone(plant.timezoneName()), clock.instant());
+    }
+
+    @Override public List<ManualStopClassificationView> stopClassifications(ActorContext actor,long plantId,long lineId) {
+        authorizeScope(actor, plantId, lineId, true);
+        return references.activeStopClassifications(plantId);
     }
 
     @Override public ManualKpiRecord get(ActorContext actor,long plantId,long lineId,LocalDate businessDate) {
@@ -59,13 +67,18 @@ public final class ManualKpiService implements ManualKpiUseCase {
         long userId = canonicalUser(actor);
         Optional<ManualKpiRecord> existing = persistence.find(command.plantId(), command.lineId(), command.businessDate());
         if (existing.isEmpty()) {
+            if (command.expectedVersion()!=null) throw new ManualKpiConflictException("expectedVersion must be omitted when creating a new Manual KPI record");
             ManualKpiDateSelection selection = datePolicy.evaluate(command.businessDate(), zone, now);
             if (!selection.selectable()) throw new DomainValidationException(selection.message());
             return persistence.create(command, plant.timezoneName(), userId, now, now.plus(Duration.ofHours(EDIT_HOURS)), correlationId);
         }
-        // Spec 03: once created while selectable, the independent 8-hour edit window governs updates.
-        // Crossing the 96-hour selection boundary does not truncate an already-open edit window.
+        // Specs 01/03: the independent 8-hour edit window governs updates after valid creation.
         if (!existing.get().editableAt(now)) throw new DomainValidationException("Manual KPI record is locked because the 8-hour edit window expired");
+        // Spec 04: updates are optimistic. The client must write the version it actually read.
+        if (command.expectedVersion()==null) throw new ManualKpiConflictException("expectedVersion is required when updating an existing Manual KPI record");
+        if (command.expectedVersion().longValue()!=existing.get().version()) {
+            throw new ManualKpiConflictException("Manual KPI record changed since it was read; reload it before saving");
+        }
         return persistence.update(existing.get(), command, userId, now, correlationId);
     }
 
@@ -98,15 +111,19 @@ public final class ManualKpiService implements ManualKpiUseCase {
         ManualOeeSection oee = c.oee()==null ? new ManualOeeSection(List.of(),List.of()) : c.oee();
         ManualWasteSection waste = c.waste()==null ? new ManualWasteSection(List.of(),null) : c.waste();
         if (oee.empty() && waste.empty()) throw new DomainValidationException("At least one OEE or waste value is required");
-        long seconds = 0;
+
+        Map<Long,ManualStopClassificationView> allowedStops = new HashMap<>();
+        for (ManualStopClassificationView x : references.activeStopClassifications(c.plantId())) allowedStops.put(x.stopClassificationId(), x);
         Set<Long> stopIds = new HashSet<>();
+        List<BigDecimal> stopHours = new ArrayList<>();
         for (ManualStopTimeInput x:oee.stopTimes()) {
-            if (x.stopClassificationId()<=0 || x.seconds()<0) throw new DomainValidationException("Stop time values must use a valid classification and non-negative seconds");
+            if (x==null || x.stopClassificationId()<=0) throw new DomainValidationException("Stop time values must reference a valid stop classification");
             if (!stopIds.add(x.stopClassificationId())) throw new DomainValidationException("Duplicate stop classification in OEE section");
-            if (!references.activeStopClassification(x.stopClassificationId())) throw new DomainValidationException("Unknown or inactive stop classification: "+x.stopClassificationId());
-            seconds = Math.addExact(seconds,x.seconds());
+            if (!allowedStops.containsKey(x.stopClassificationId())) throw new DomainValidationException("Unknown, inactive or out-of-scope stop classification: "+x.stopClassificationId());
+            stopHours.add(x.hours());
         }
-        if (seconds>86400) throw new DomainValidationException("Total daily stop time cannot exceed 86400 seconds");
+        stopTimePolicy.validate(stopHours);
+
         Set<Long> metricIds = new HashSet<>();
         for (ManualPerformanceInput x:oee.performance()) {
             if (x.metricDefinitionId()<=0 || x.uomId()<=0 || negative(x.value())) throw new DomainValidationException("Performance values must be non-negative and reference metric/UOM");

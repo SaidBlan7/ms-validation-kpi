@@ -15,8 +15,9 @@ Reglas implementadas:
 - Al vencer las 8 horas, el registro queda bloqueado para edición.
 - Desactivar el feature bloquea nuevas altas/ediciones, pero no elimina ni oculta históricos existentes.
 - Precedencia resuelta con criterio operacional: **AUTOMATIC_WINS**. Si posteriormente existe dato automático para el mismo alcance/fecha, el automático debe ser el valor efectivo de reporte y el manual debe conservarse como evidencia histórica.
-- OEE manual acepta tiempos por `stopClassificationId` y rendimiento por `metricDefinitionId + value + uomId`.
-- Los tiempos OEE son no negativos, sin duplicados por clasificación y con máximo total diario de 86,400 segundos.
+- OEE manual acepta tiempos por `stopClassificationId + hours` (horas decimales) y rendimiento por `metricDefinitionId + value + uomId`.
+- Los tiempos OEE son no negativos, sin duplicados por clasificación y con máximo total diario exacto de 24 horas; la suma se valida con `BigDecimal`.
+- Las actualizaciones usan `expectedVersion` como optimistic lock para evitar pérdida silenciosa de cambios concurrentes.
 - Desperdicio manual acepta kg por clasificación/subclasificación y toneladas producidas; no se permiten negativos ni duplicados de clasificación/subclasificación.
 - Referencias se validan contra catálogos canónicos: `stops.stop_classification`, `kpi.metric_definition`, `core.unit_of_measure`, `waste.waste_classification` y `waste.waste_subclassification`.
 - El contrato de persistencia conserva actor canónico, creación, actualización, `editableUntil`, versión, correlación y eventos de auditoría CREATE/UPDATE.
@@ -27,6 +28,7 @@ Reglas implementadas:
 
 - `GET /api/v1/manual-kpis/policy`
 - `GET /api/v1/manual-kpis/date-selection?plantId={id}&lineId={id}&businessDate=YYYY-MM-DD`
+- `GET /api/v1/manual-kpis/stop-classifications?plantId={id}&lineId={id}`
 - `GET /api/v1/manual-kpis?plantId={id}&lineId={id}&businessDate=YYYY-MM-DD`
 - `PUT /api/v1/manual-kpis`
 

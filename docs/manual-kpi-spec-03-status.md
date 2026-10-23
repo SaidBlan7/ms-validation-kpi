@@ -60,3 +60,7 @@ No se necesita pedir DDL ni catálogo de festivos a Data para esta spec:
 Ninguno para la regla de selección de fecha.
 
 Sigue vigente el bloqueo externo de Spec 01: falta la entidad canónica de persistencia de KPI Manuales para guardar capturas en PostgreSQL/Lakebase y posteriormente integrarlas a reporting.
+
+
+## Ajuste incorporado por Spec 04
+El guardado mantiene intactas las reglas 96 h/8 h y agrega validación exacta de tiempos en horas decimales más optimistic locking por `version`. No cambia la semántica temporal de esta spec.

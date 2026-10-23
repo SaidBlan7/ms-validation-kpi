@@ -15,6 +15,12 @@ public class ManualKpiController {
         LOG.info("event=manual_kpi_date_selection actorObject={} plantId={} lineId={} businessDate={} selectable={} rejectionCode={} correlationId={} result=OK",actor.objectId(),plantId,lineId,businessDate,r.selectable(),r.rejectionCode(),correlation());
         return r;
     }
+    @GetMapping("/stop-classifications") public List<ManualStopClassificationView> stopClassifications(@AuthenticationPrincipal Jwt jwt,@RequestParam long plantId,@RequestParam long lineId){
+        ActorContext actor=RequestActorContextResolver.resolve(jwt);
+        var r=useCase.stopClassifications(actor,plantId,lineId);
+        LOG.info("event=manual_kpi_stop_catalog actorObject={} plantId={} lineId={} count={} correlationId={} result=OK",actor.objectId(),plantId,lineId,r.size(),correlation());
+        return r;
+    }
     @GetMapping public ManualKpiRecord get(@AuthenticationPrincipal Jwt jwt,@RequestParam long plantId,@RequestParam long lineId,@RequestParam LocalDate businessDate){
         ActorContext actor=RequestActorContextResolver.resolve(jwt); LOG.info("event=manual_kpi_selection actorObject={} plantId={} lineId={} businessDate={} correlationId={}",actor.objectId(),plantId,lineId,businessDate,correlation());
         try { ManualKpiRecord r=useCase.get(actor,plantId,lineId,businessDate); LOG.info("event=manual_kpi_read actorObject={} plantId={} lineId={} businessDate={} recordId={} correlationId={} result=OK",actor.objectId(),plantId,lineId,businessDate,r.recordId(),correlation()); return r; }
@@ -27,10 +33,10 @@ public class ManualKpiController {
     }
     private static SaveManualKpiCommand toCommand(ManualKpiHttpRequest r){
         if(r==null) throw new IllegalArgumentException("JSON body is required");
-        var stops=r.oee()==null||r.oee().stopTimes()==null?List.<ManualStopTimeInput>of():r.oee().stopTimes().stream().map(x->new ManualStopTimeInput(x.stopClassificationId(),x.seconds())).toList();
+        var stops=r.oee()==null||r.oee().stopTimes()==null?List.<ManualStopTimeInput>of():r.oee().stopTimes().stream().map(x->new ManualStopTimeInput(x.stopClassificationId(),x.hours())).toList();
         var perf=r.oee()==null||r.oee().performance()==null?List.<ManualPerformanceInput>of():r.oee().performance().stream().map(x->new ManualPerformanceInput(x.metricDefinitionId(),x.value(),x.uomId())).toList();
         var wastes=r.waste()==null||r.waste().entries()==null?List.<ManualWasteInput>of():r.waste().entries().stream().map(x->new ManualWasteInput(x.wasteClassificationId(),x.wasteSubclassificationId(),x.kilograms())).toList();
-        return new SaveManualKpiCommand(r.plantId(),r.lineId(),r.businessDate(),new ManualOeeSection(stops,perf),new ManualWasteSection(wastes,r.waste()==null?null:r.waste().producedTonnes()));
+        return new SaveManualKpiCommand(r.plantId(),r.lineId(),r.businessDate(),r.expectedVersion(),new ManualOeeSection(stops,perf),new ManualWasteSection(wastes,r.waste()==null?null:r.waste().producedTonnes()));
     }
     private static String correlation(){String x=MDC.get("correlationId");return x==null?"":x;}
     private static String safe(RuntimeException e){String x=e.getMessage();return x==null||x.isBlank()?e.getClass().getSimpleName():x;}
