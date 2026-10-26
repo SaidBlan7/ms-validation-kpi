@@ -64,3 +64,6 @@ Sigue vigente el bloqueo externo de Spec 01: falta la entidad canónica de persi
 
 ## Ajuste incorporado por Spec 04
 El guardado mantiene intactas las reglas 96 h/8 h y agrega validación exacta de tiempos en horas decimales más optimistic locking por `version`. No cambia la semántica temporal de esta spec.
+
+## Ajuste incorporado por Spec 08
+La ventana independiente de edición queda cerrada como intervalo semiabierto `[createdAt, createdAt + 8h)`. Exactamente en `editableUntil` el registro está bloqueado. La zona horaria usada para mostrar un histórico ya creado es el snapshot almacenado con el registro, no una reinterpretación con una configuración futura de planta.

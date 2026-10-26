@@ -58,3 +58,6 @@ Se hace explícita la unidad de `producedTonnes` como toneladas y se conserva `k
 1. Sigue pendiente la entidad canónica de persistencia de KPI Manuales solicitada desde la Spec 01. Debe poder conservar también las toneladas producidas del registro manual, además de los kg por subclasificación, usuario, timestamps, versionado y trazabilidad.
 2. La precisión decimal máxima y cualquier límite operativo máximo por línea/planta no están definidos por la spec ni por la base canónica actual; no se inventa una restricción.
 3. La propagación a reportes/indicadores PT/desperdicio es responsabilidad de los consumidores externos una vez exista la persistencia canónica.
+
+## Ajuste incorporado por Spec 08
+Los cambios de `producedTonnes` quedan trazados con actor, timestamp, versión y correlación del mismo registro manual. La vista de trazabilidad conserva creación y actualizaciones sin reemplazar el autor/timestamp inicial.

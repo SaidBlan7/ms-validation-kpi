@@ -70,3 +70,8 @@ Data debe incorporar al modelo canónico una entidad/estructura oficial de persi
 La spec exige consumo en OEE 1, OEE 2, OEE completo, indicadores y reportes de desperdicio. Esos consumidores no están dentro de este microservicio. El criterio ya queda cerrado como `AUTOMATIC_WINS_MANUAL_RETAINED_FOR_TRACEABILITY`, pero el pipeline/reporting debe leer la entidad canónica de KPI Manuales que Data incorpore y aplicar esa precedencia.
 
 Hasta que exista dicha entidad y los consumidores la integren, la propagación productiva a reportes no puede quedar implementada desde este repositorio.
+
+## Ajuste incorporado por Spec 08
+- La ventana de edición se centraliza en dominio y queda formalmente definida como `[createdAt, createdAt + 8h)`: el instante exacto `+8h` ya no es editable.
+- El registro conserva `plantTimezone` como snapshot para mostrar creación, actualizaciones y expiración de forma estable aun si la configuración futura de la planta cambia.
+- Se expone `GET /api/v1/manual-kpis/trace` para recuperar actor/timestamps y eventos CREATE/UPDATE sin alterar el contrato de lectura principal.

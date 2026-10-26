@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.18.0
-  description: Specs 01-07 KPI Validation plus KPI Manuales Specs 01-06. Spec 06 exposes the canonical waste classification/subclassification compendium by plant scope and requires every manual waste kg value to reference a stable canonical subclassification. Spec 05 mass-performance and Spec 04 stop-time/optimistic-concurrency rules remain active. Manual capture stays isolated from Validation/Approval KPI and PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
+  version: 0.19.0
+  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI and PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
 paths:
   /api/v1/manual-kpis/policy:
     get:
@@ -45,6 +45,21 @@ paths:
         '200': { description: Active canonical waste classification/subclassification entries }
         '401': { description: Authentication required }
         '403': { description: Plant/line/capability scope denied }
+
+  /api/v1/manual-kpis/trace:
+    get:
+      summary: Returns creation/update trace metadata for one Manual KPI record
+      description: Returns stable canonical user IDs, current display names when resolvable, original UTC instants and plant-local timestamps using the timezone snapshot stored with the record. The edit window is [createdAt, createdAt+8h), so editableUntil itself is already expired.
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: businessDate, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Manual KPI trace metadata and CREATE/UPDATE events }
+        '401': { description: Authentication required }
+        '403': { description: Plant/line/capability scope denied }
+        '404': { description: Manual KPI record not found }
+        '503': { description: Canonical Manual KPI persistence is not yet available in PostgreSQL/Lakebase }
 
   /api/v1/manual-kpis:
     get:

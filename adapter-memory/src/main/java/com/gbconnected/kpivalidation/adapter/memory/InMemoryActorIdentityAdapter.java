@@ -22,6 +22,12 @@ public final class InMemoryActorIdentityAdapter implements ActorIdentityPort {
         return Optional.of(new ActorIdentitySnapshot(userId, "Development User", "dev@local", true, source()));
     }
 
+    @Override
+    public Optional<ActorIdentitySnapshot> findByCanonicalUserId(long userId) {
+        if (this.userId != userId) return Optional.empty();
+        return Optional.of(new ActorIdentitySnapshot(userId, "Development User", "dev@local", true, source()));
+    }
+
     @Override public String source() { return "MEMORY_USER_IDENTITY"; }
     @Override public boolean canonicalUserIdAvailable() { return true; }
 }

@@ -7,6 +7,7 @@ import java.util.UUID;
 /** Resolves the canonical app_security identity used by future validation persistence/audit. */
 public interface ActorIdentityPort {
     Optional<ActorIdentitySnapshot> findByEntraIdentity(UUID tenantId, UUID objectId);
+    default Optional<ActorIdentitySnapshot> findByCanonicalUserId(long userId) { return Optional.empty(); }
     String source();
 
     default boolean canonicalUserIdAvailable() { return false; }

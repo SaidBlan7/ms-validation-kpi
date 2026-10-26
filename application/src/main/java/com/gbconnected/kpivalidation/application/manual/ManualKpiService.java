@@ -6,6 +6,7 @@ import com.gbconnected.kpivalidation.application.port.out.manual.*;
 import com.gbconnected.kpivalidation.domain.DomainValidationException;
 import com.gbconnected.kpivalidation.domain.manual.ManualKpiDatePolicy;
 import com.gbconnected.kpivalidation.domain.manual.ManualKpiDateSelection;
+import com.gbconnected.kpivalidation.domain.manual.ManualKpiEditWindowPolicy;
 import com.gbconnected.kpivalidation.domain.manual.ManualStopTimePolicy;
 import com.gbconnected.kpivalidation.domain.manual.ManualMassPerformancePolicy;
 import com.gbconnected.kpivalidation.domain.manual.ManualWastePolicy;
@@ -14,8 +15,8 @@ import java.time.*;
 import java.util.*;
 
 public final class ManualKpiService implements ManualKpiUseCase {
-    private static final int EDIT_HOURS = 8;
     private final ManualKpiDatePolicy datePolicy = new ManualKpiDatePolicy();
+    private final ManualKpiEditWindowPolicy editWindowPolicy = new ManualKpiEditWindowPolicy();
     private final ManualStopTimePolicy stopTimePolicy = new ManualStopTimePolicy();
     private final ManualMassPerformancePolicy massPerformancePolicy = new ManualMassPerformancePolicy();
     private final ManualWastePolicy wastePolicy = new ManualWastePolicy();
@@ -36,9 +37,10 @@ public final class ManualKpiService implements ManualKpiUseCase {
     }
 
     @Override public ManualKpiPolicyView policy() {
-        return new ManualKpiPolicyView(ManualKpiDatePolicy.HISTORY_HOURS, EDIT_HOURS, ManualKpiDatePolicy.OEE_PERIOD_HOURS,
+        return new ManualKpiPolicyView(ManualKpiDatePolicy.HISTORY_HOURS, ManualKpiEditWindowPolicy.EDIT_HOURS, ManualKpiDatePolicy.OEE_PERIOD_HOURS,
                 "PLANT_LOCAL_DATE_START_WITHIN_EXACT_ROLLING_96_HOURS", true, true, true, false,
                 "FIXED_24_HOUR_INTERVAL_FROM_PLANT_LOCAL_DAY_START", "ABSOLUTE_8_HOURS_FROM_FIRST_SAVE", true,
+                "STORE_AND_DISPLAY_USING_PLANT_TIMEZONE_SNAPSHOT_FROM_FIRST_SAVE", true,
                 ManualStopTimePolicy.CAPTURE_UNIT, ManualStopTimePolicy.DAILY_HOURS.intValueExact(), true,
                 List.of(ManualMassPerformancePolicy.ELABORATED_VARIABLE, ManualMassPerformancePolicy.DELIVERED_VARIABLE), true,
                 "NO_ORDERING_CONSTRAINT_DELIVERED_MAY_EXCEED_ELABORATED", "PRESERVE_DECIMAL_NO_APPLICATION_ROUNDING",
@@ -69,6 +71,24 @@ public final class ManualKpiService implements ManualKpiUseCase {
         return persistence.find(plantId,lineId,businessDate).orElseThrow(() -> new ManualKpiNotFoundException("Manual KPI record was not found"));
     }
 
+    @Override public ManualKpiTraceView trace(ActorContext actor,long plantId,long lineId,LocalDate businessDate) {
+        ManualKpiRecord record = get(actor, plantId, lineId, businessDate);
+        ZoneId zone = zone(record.plantTimezone());
+        String createdName = userDisplayName(record.createdByUserId());
+        String updatedName = userDisplayName(record.updatedByUserId());
+        List<ManualKpiAuditEventView> events = record.auditEvents().stream()
+                .map(e -> new ManualKpiAuditEventView(e.version(), e.action(), e.actorUserId(), userDisplayName(e.actorUserId()),
+                        e.occurredAt(), ZonedDateTime.ofInstant(e.occurredAt(), zone), e.correlationId(), e.result()))
+                .toList();
+        Instant now = clock.instant();
+        return new ManualKpiTraceView(record.recordId(), record.version(), record.plantId(), record.lineId(),
+                record.businessDate().toString(), record.plantTimezone(), record.createdByUserId(), createdName,
+                record.createdAt(), ZonedDateTime.ofInstant(record.createdAt(), zone), record.updatedByUserId(), updatedName,
+                record.updatedAt(), ZonedDateTime.ofInstant(record.updatedAt(), zone), record.editableUntil(),
+                ZonedDateTime.ofInstant(record.editableUntil(), zone), editWindowPolicy.editableAt(record.createdAt(), now),
+                "[createdAt, createdAt+8h)", events);
+    }
+
     @Override public ManualKpiRecord save(ActorContext actor, SaveManualKpiCommand command, String correlationId) {
         Objects.requireNonNull(command, "command is required");
         PlantContext plant = authorizeScope(actor, command.plantId(), command.lineId(), true);
@@ -83,10 +103,10 @@ public final class ManualKpiService implements ManualKpiUseCase {
             if (command.expectedVersion()!=null) throw new ManualKpiConflictException("expectedVersion must be omitted when creating a new Manual KPI record");
             ManualKpiDateSelection selection = datePolicy.evaluate(command.businessDate(), zone, now);
             if (!selection.selectable()) throw new DomainValidationException(selection.message());
-            return persistence.create(command, plant.timezoneName(), userId, now, now.plus(Duration.ofHours(EDIT_HOURS)), correlationId);
+            return persistence.create(command, plant.timezoneName(), userId, now, editWindowPolicy.expiresAt(now), correlationId);
         }
         // Specs 01/03: the independent 8-hour edit window governs updates after valid creation.
-        if (!existing.get().editableAt(now)) throw new DomainValidationException("Manual KPI record is locked because the 8-hour edit window expired");
+        if (!editWindowPolicy.editableAt(existing.get().createdAt(), now)) throw new DomainValidationException("Manual KPI record is locked because the 8-hour edit window expired");
         // Spec 04: updates are optimistic. The client must write the version it actually read.
         if (command.expectedVersion()==null) throw new ManualKpiConflictException("expectedVersion is required when updating an existing Manual KPI record");
         if (command.expectedVersion().longValue()!=existing.get().version()) {
@@ -110,6 +130,13 @@ public final class ManualKpiService implements ManualKpiUseCase {
             if (!activation.enabledForScope(plantId,lineId)) throw new DomainValidationException("Manual KPI module is disabled for the requested plant/line");
         }
         return plant;
+    }
+
+    private String userDisplayName(long userId) {
+        return identities.findByCanonicalUserId(userId)
+                .map(i -> i.displayName() == null || i.displayName().isBlank() ? i.principalName() : i.displayName())
+                .filter(Objects::nonNull)
+                .orElse(null);
     }
 
     private long canonicalUser(ActorContext actor) {

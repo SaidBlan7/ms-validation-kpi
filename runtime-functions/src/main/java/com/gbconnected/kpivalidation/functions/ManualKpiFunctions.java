@@ -51,6 +51,18 @@ public class ManualKpiFunctions {
         } catch(SecurityException e){return reject(req,HttpStatus.UNAUTHORIZED,e,corr);} catch(AuthorizationException e){return reject(req,HttpStatus.FORBIDDEN,e,corr);} catch(Exception e){return reject(req,HttpStatus.BAD_REQUEST,e,corr);}
     }
 
+    @FunctionName("manual-kpi-trace")
+    public HttpResponseMessage trace(@HttpTrigger(name="req", methods={HttpMethod.GET}, route="v1/manual-kpis/trace", authLevel=AuthorizationLevel.FUNCTION) HttpRequestMessage<Optional<String>> req, ExecutionContext ctx){
+        String corr=correlation(req);
+        try {
+            ActorContext actor=FunctionActorContextResolver.resolve(req);
+            long plant=requiredLong(req.getQueryParameters().get("plantId"),"plantId");
+            long line=requiredLong(req.getQueryParameters().get("lineId"),"lineId");
+            LocalDate date=LocalDate.parse(required(req.getQueryParameters().get("businessDate"),"businessDate"));
+            return json(req,HttpStatus.OK,FunctionRuntime.RUNTIME.manualKpis().trace(actor,plant,line,date),corr);
+        } catch(SecurityException e){return reject(req,HttpStatus.UNAUTHORIZED,e,corr);} catch(AuthorizationException e){return reject(req,HttpStatus.FORBIDDEN,e,corr);} catch(ManualKpiNotFoundException e){return reject(req,HttpStatus.NOT_FOUND,e,corr);} catch(ManualKpiStorageUnavailableException e){return reject(req,HttpStatus.SERVICE_UNAVAILABLE,e,corr);} catch(Exception e){return reject(req,HttpStatus.BAD_REQUEST,e,corr);}
+    }
+
     @FunctionName("manual-kpi-get")
     public HttpResponseMessage get(@HttpTrigger(name="req", methods={HttpMethod.GET}, route="v1/manual-kpis", authLevel=AuthorizationLevel.FUNCTION) HttpRequestMessage<Optional<String>> req, ExecutionContext ctx){
         String corr=correlation(req);

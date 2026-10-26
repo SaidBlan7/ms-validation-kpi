@@ -13,6 +13,8 @@ public record ManualKpiPolicyView(
         boolean calendarDayFilteringApplied,
         String dstBehavior,
         String editWindowBasis,
+        boolean editWindowEndExclusive,
+        String historicalTimezoneBehavior,
         boolean editMayContinueAfterDateLeavesHistoricalWindow,
         String stopTimeCaptureUnit,
         int maxDailyStopHours,
