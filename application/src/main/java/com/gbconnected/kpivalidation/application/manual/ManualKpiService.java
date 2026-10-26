@@ -42,6 +42,8 @@ public final class ManualKpiService implements ManualKpiUseCase {
                 ManualStopTimePolicy.CAPTURE_UNIT, ManualStopTimePolicy.DAILY_HOURS.intValueExact(), true,
                 List.of(ManualMassPerformancePolicy.ELABORATED_VARIABLE, ManualMassPerformancePolicy.DELIVERED_VARIABLE), true,
                 "NO_ORDERING_CONSTRAINT_DELIVERED_MAY_EXCEED_ELABORATED", "PRESERVE_DECIMAL_NO_APPLICATION_ROUNDING",
+                ManualWastePolicy.WASTE_CAPTURE_UNIT, ManualWastePolicy.PRODUCED_QUANTITY_UNIT, true,
+                "PRESERVE_DECIMAL_NO_APPLICATION_ROUNDING",
                 "AUTOMATIC_WINS_MANUAL_RETAINED_FOR_TRACEABILITY", "HISTORICAL_READ_ONLY_AFTER_DEACTIVATION",
                 activation.configurationCode(), authorization.capabilityCode(), persistence.available(), persistence.source());
     }
@@ -163,7 +165,7 @@ public final class ManualKpiService implements ManualKpiUseCase {
                 throw new DomainValidationException("Unknown, inactive or out-of-scope waste subclassification: "+x.wasteSubclassificationId());
             }
         }
-        if (waste.producedTonnes()!=null && waste.producedTonnes().signum()<0) throw new DomainValidationException("producedTonnes must be non-negative");
+        wastePolicy.validateProducedTonnes(waste.producedTonnes());
     }
     private static String wasteKey(long classificationId,long subclassificationId){ return classificationId+":"+subclassificationId; }
     private static ZoneId zone(String id){ try{return ZoneId.of(id);}catch(Exception e){throw new DomainValidationException("Plant timezone_name is invalid");} }

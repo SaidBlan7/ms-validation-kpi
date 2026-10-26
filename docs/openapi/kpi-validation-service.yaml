@@ -103,14 +103,14 @@ paths:
                           wasteClassificationId: { type: integer, format: int64 }
                           wasteSubclassificationId: { type: integer, format: int64, description: Required stable canonical waste subclassification reference. }
                           kilograms: { type: number, minimum: 0 }
-                    producedTonnes: { type: number, minimum: 0 }
+                    producedTonnes: { type: number, minimum: 0, description: Manual production quantity in metric tonnes. Distinct from waste kilograms; zero and decimals are allowed. No application rounding or maximum is imposed. }
       responses:
         '200': { description: Manual KPI record created or updated }
         '400': { description: Invalid request }
         '401': { description: Authentication required }
         '403': { description: Plant/line/capability scope denied }
         '409': { description: Optimistic concurrency conflict or invalid expectedVersion usage }
-        '422': { description: Business rule violation, including stop-time total > 24 hours, invalid manual mass values or expired edit window }
+        '422': { description: Business rule violation, including stop-time total > 24 hours, invalid manual mass/production values or expired edit window }
         '503': { description: Canonical Manual KPI persistence is not yet available in PostgreSQL/Lakebase }
   /api/v1/manual-kpis/scope/me:
     get:

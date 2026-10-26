@@ -1,16 +1,17 @@
-# KPI Manuales Spec 06 — archivos nuevos/modificados
+# KPI Manuales — Spec 07
 
-Este paquete contiene únicamente archivos nuevos/modificados para implementar la Spec 06 y los ajustes necesarios sobre Specs 01–05.
+Paquete con **solo archivos nuevos/modificados** para implementar la Spec 07 y ajustar Specs 01–06 donde fue necesario.
 
-No reemplazar módulos completos: copiar respetando las rutas del repositorio.
+## Cambios
+- `domain`: formaliza unidades `KG` y `TONNE` y valida toneladas producidas no negativas; permite cero y decimales.
+- `application`: mueve la validación de `producedTonnes` a policy de dominio y expone en la policy del módulo que kg y toneladas son magnitudes/unidades distintas.
+- `docs`: agrega estado de Spec 07, ajusta Spec 06 y actualiza OpenAPI.
 
-Cambios principales:
-- catálogo canónico de desperdicios por planta/organización;
-- `GET /api/v1/manual-kpis/waste-catalog`;
-- cada kg requiere `wasteClassificationId + wasteSubclassificationId`;
-- regla de kg no negativos en domain;
-- adapter-memory y adapter-postgres actualizados;
-- conservación/corrección de una subclasificación previamente capturada si luego queda inactiva dentro de las 8 h;
-- documentación Spec 06 y OpenAPI actualizados.
+## Sin cambios necesarios
+- `adapter-memory`: ya persiste el `ManualWasteSection` completo, incluido `producedTonnes`.
+- `adapter-postgres`: sigue bloqueado para escritura de KPI Manuales hasta que Data defina la entidad canónica; la Spec 07 no agrega un catálogo/lookup nuevo.
+- `bootstrap`: no hay puertos/adapters nuevos.
+- `runtime-app-service` y `runtime-functions`: ya aceptaban y mapeaban `waste.producedTonnes`; no requieren cambio de código para la nueva regla.
 
-Persistencia PostgreSQL de la captura Manual KPI sigue fail-closed hasta que Data entregue la entidad canónica solicitada desde Spec 01.
+## Pendiente externo
+Sigue vigente el pendiente de Data de la Spec 01: definir la persistencia canónica de KPI Manuales, ahora incluyendo el valor de toneladas producidas y su trazabilidad/origen manual.

@@ -13,7 +13,7 @@ Implementada en domain, application, adapter-memory, adapter-postgres, App Servi
 - Solo entradas activas se muestran para nuevas capturas.
 - Los kg aceptan cero y decimales; negativos o nulos se rechazan. No se impone precisión máxima artificial.
 - No se permiten subclasificaciones duplicadas dentro de la misma captura.
-- `producedTonnes` permanece separado de los kg por subclasificación.
+- `producedTonnes` permanece separado de los kg por subclasificación y, desde la Spec 07, su unidad contractual queda explícitamente fijada en toneladas.
 - Si una subclasificación se inactiva durante la ventana de 8 horas, no puede agregarse como nueva; si ya formaba parte del registro existente, puede conservarse/corregirse durante esa ventana siempre que la referencia canónica siga existiendo.
 - Las actualizaciones mantienen optimistic locking mediante `expectedVersion`.
 - Los históricos conservan el ID canónico estable; el nombre visual se consulta desde catálogo y no sustituye la referencia.
