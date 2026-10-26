@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.17.0
-  description: Specs 01-07 KPI Validation plus KPI Manuales Specs 01-05. Spec 05 captures explicit elaborated/delivered mass performance inputs as non-negative decimals without imposing delivered<=elaborated or application rounding. Spec 04 stop-time and optimistic-concurrency rules remain active. Manual capture stays isolated from Validation/Approval KPI and PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
+  version: 0.18.0
+  description: Specs 01-07 KPI Validation plus KPI Manuales Specs 01-06. Spec 06 exposes the canonical waste classification/subclassification compendium by plant scope and requires every manual waste kg value to reference a stable canonical subclassification. Spec 05 mass-performance and Spec 04 stop-time/optimistic-concurrency rules remain active. Manual capture stays isolated from Validation/Approval KPI and PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
 paths:
   /api/v1/manual-kpis/policy:
     get:
@@ -31,6 +31,18 @@ paths:
         - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
       responses:
         '200': { description: Active stop classifications ordered by displayOrder/name }
+        '401': { description: Authentication required }
+        '403': { description: Plant/line/capability scope denied }
+
+  /api/v1/manual-kpis/waste-catalog:
+    get:
+      summary: Lists active canonical waste subclassifications available for Manual KPI waste capture
+      description: Resolves the current plant organization and returns active global plus organization-scoped waste subclassifications. Organization-scoped rows with the same classification/subclassification codes take precedence. The returned IDs are the stable references required on save.
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: Active canonical waste classification/subclassification entries }
         '401': { description: Authentication required }
         '403': { description: Plant/line/capability scope denied }
 
@@ -86,10 +98,10 @@ paths:
                       type: array
                       items:
                         type: object
-                        required: [wasteClassificationId, kilograms]
+                        required: [wasteClassificationId, wasteSubclassificationId, kilograms]
                         properties:
                           wasteClassificationId: { type: integer, format: int64 }
-                          wasteSubclassificationId: { type: integer, format: int64, nullable: true }
+                          wasteSubclassificationId: { type: integer, format: int64, description: Required stable canonical waste subclassification reference. }
                           kilograms: { type: number, minimum: 0 }
                     producedTonnes: { type: number, minimum: 0 }
       responses:

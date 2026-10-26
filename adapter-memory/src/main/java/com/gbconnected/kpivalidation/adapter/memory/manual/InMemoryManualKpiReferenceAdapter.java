@@ -1,6 +1,7 @@
 package com.gbconnected.kpivalidation.adapter.memory.manual;
 
 import com.gbconnected.kpivalidation.application.manual.ManualStopClassificationView;
+import com.gbconnected.kpivalidation.application.manual.ManualWasteCatalogEntryView;
 import com.gbconnected.kpivalidation.application.port.out.manual.ManualKpiReferencePort;
 import java.util.List;
 
@@ -17,14 +18,23 @@ public final class InMemoryManualKpiReferenceAdapter implements ManualKpiReferen
             stop(8,"UNCLASSIFIED","Sin clasificar",8,"UNPROGRAMMED"),
             stop(9,"REDUCED_RATE","Ritmo reducido",9,"UNPROGRAMMED"),
             stop(10,"MICROSTOP","Microparos",10,"UNPROGRAMMED"));
+    private static final List<ManualWasteCatalogEntryView> WASTE = List.of(
+            waste(1,"PROCESS","Proceso",101,"DOUGH","Masa"),
+            waste(1,"PROCESS","Proceso",102,"PRODUCT","Producto"),
+            waste(2,"PACKAGING","Empaque",201,"PRIMARY_PACKAGING","Empaque primario"),
+            waste(2,"PACKAGING","Empaque",202,"SECONDARY_PACKAGING","Empaque secundario"));
 
     public List<ManualStopClassificationView> activeStopClassifications(long plantId){return STOPS;}
+    public List<ManualWasteCatalogEntryView> activeWasteSubclassifications(long plantId){return WASTE;}
+    public boolean wasteSubclassificationExists(long plantId,long c,long s){return WASTE.stream().anyMatch(x->x.wasteClassificationId()==c&&x.wasteSubclassificationId()==s);}
     public boolean activeMetricDefinition(long id){return id>0;}
     public boolean activeUom(long id){return id>0;}
-    public boolean validWasteClassification(long c,Long s){return c>0 && (s==null||s>0);}
     public String source(){return "MEMORY_REFERENCE_CATALOGS";}
 
     private static ManualStopClassificationView stop(long id,String code,String name,int order,String type){
         return new ManualStopClassificationView(id,code,name,order,type,"PROGRAMMED".equals(type),"UNPROGRAMMED".equals(type));
+    }
+    private static ManualWasteCatalogEntryView waste(long cid,String cc,String cn,long sid,String sc,String sn){
+        return new ManualWasteCatalogEntryView(cid,cc,cn,sid,sc,sn,true);
     }
 }

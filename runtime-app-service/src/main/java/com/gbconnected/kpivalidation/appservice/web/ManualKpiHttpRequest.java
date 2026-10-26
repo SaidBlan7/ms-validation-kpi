@@ -9,5 +9,5 @@ public record ManualKpiHttpRequest(long plantId,long lineId,LocalDate businessDa
     public record StopTime(long stopClassificationId,BigDecimal hours) {}
     public record MassPerformance(BigDecimal elaboratedMass,BigDecimal deliveredMass) {}
     public record Waste(List<WasteEntry> entries,BigDecimal producedTonnes) {}
-    public record WasteEntry(long wasteClassificationId,Long wasteSubclassificationId,BigDecimal kilograms) {}
+    public record WasteEntry(long wasteClassificationId,long wasteSubclassificationId,BigDecimal kilograms) {}
 }

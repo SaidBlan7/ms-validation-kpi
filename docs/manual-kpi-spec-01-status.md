@@ -18,7 +18,7 @@ Reglas implementadas:
 - OEE manual acepta tiempos por `stopClassificationId + hours` (horas decimales) y rendimiento explícito mediante `ELABORATED_MASS` + `DELIVERED_MASS` (`oee.massPerformance.elaboratedMass/deliveredMass`).
 - Los tiempos OEE son no negativos, sin duplicados por clasificación y con máximo total diario exacto de 24 horas; la suma se valida con `BigDecimal`.
 - Las actualizaciones usan `expectedVersion` como optimistic lock para evitar pérdida silenciosa de cambios concurrentes.
-- Desperdicio manual acepta kg por clasificación/subclasificación y toneladas producidas; no se permiten negativos ni duplicados de clasificación/subclasificación.
+- Desperdicio manual acepta kg por subclasificación canónica y toneladas producidas por separado; no se permiten negativos ni subclasificaciones duplicadas. Desde Spec 06, cada kg requiere `wasteClassificationId + wasteSubclassificationId`.
 - Referencias se validan contra catálogos canónicos cuando aplican: `stops.stop_classification`, `waste.waste_classification` y `waste.waste_subclassification`. El bloque manual de masas usa variables semánticas explícitas y no obliga al cliente a escoger IDs de métrica/UOM.
 - El contrato de persistencia conserva actor canónico, creación, actualización, `editableUntil`, versión, correlación y eventos de auditoría CREATE/UPDATE.
 - Adapter `memory` queda funcional para pruebas locales end-to-end.
@@ -54,7 +54,7 @@ La base canónica entregada **no contiene una entidad de negocio para almacenar 
 - cabecera diaria manual por planta/línea/fecha;
 - sección OEE de tiempos por clasificación;
 - sección OEE de masas elaboradas y entregadas como entradas diferenciadas de rendimiento;
-- sección de desperdicio por clasificación/subclasificación;
+- sección de desperdicio por subclasificación canónica;
 - toneladas producidas;
 - primera creación, versión/revisiones y ventana de edición de 8 horas;
 - trazabilidad del valor manual aun cuando posteriormente llegue el automático.

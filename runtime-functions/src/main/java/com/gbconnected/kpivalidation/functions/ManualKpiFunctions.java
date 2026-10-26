@@ -40,6 +40,17 @@ public class ManualKpiFunctions {
         } catch(SecurityException e){return reject(req,HttpStatus.UNAUTHORIZED,e,corr);} catch(AuthorizationException e){return reject(req,HttpStatus.FORBIDDEN,e,corr);} catch(Exception e){return reject(req,HttpStatus.BAD_REQUEST,e,corr);}
     }
 
+    @FunctionName("manual-kpi-waste-catalog")
+    public HttpResponseMessage wasteCatalog(@HttpTrigger(name="req", methods={HttpMethod.GET}, route="v1/manual-kpis/waste-catalog", authLevel=AuthorizationLevel.FUNCTION) HttpRequestMessage<Optional<String>> req, ExecutionContext ctx){
+        String corr=correlation(req);
+        try {
+            ActorContext actor=FunctionActorContextResolver.resolve(req);
+            long plant=requiredLong(req.getQueryParameters().get("plantId"),"plantId");
+            long line=requiredLong(req.getQueryParameters().get("lineId"),"lineId");
+            return json(req,HttpStatus.OK,FunctionRuntime.RUNTIME.manualKpis().wasteCatalog(actor,plant,line),corr);
+        } catch(SecurityException e){return reject(req,HttpStatus.UNAUTHORIZED,e,corr);} catch(AuthorizationException e){return reject(req,HttpStatus.FORBIDDEN,e,corr);} catch(Exception e){return reject(req,HttpStatus.BAD_REQUEST,e,corr);}
+    }
+
     @FunctionName("manual-kpi-get")
     public HttpResponseMessage get(@HttpTrigger(name="req", methods={HttpMethod.GET}, route="v1/manual-kpis", authLevel=AuthorizationLevel.FUNCTION) HttpRequestMessage<Optional<String>> req, ExecutionContext ctx){
         String corr=correlation(req);
@@ -74,7 +85,7 @@ public class ManualKpiFunctions {
         }
         if(b.has("waste")&&!b.get("waste").isJsonNull()){
             JsonObject w=b.getAsJsonObject("waste"); if(w.has("producedTonnes")&&!w.get("producedTonnes").isJsonNull()) tonnes=w.get("producedTonnes").getAsBigDecimal();
-            if(w.has("entries")&&w.get("entries").isJsonArray()) for(JsonElement e:w.getAsJsonArray("entries")){JsonObject x=e.getAsJsonObject();Long sub=x.has("wasteSubclassificationId")&&!x.get("wasteSubclassificationId").isJsonNull()?x.get("wasteSubclassificationId").getAsLong():null;waste.add(new ManualWasteInput(x.get("wasteClassificationId").getAsLong(),sub,x.get("kilograms").getAsBigDecimal()));}
+            if(w.has("entries")&&w.get("entries").isJsonArray()) for(JsonElement e:w.getAsJsonArray("entries")){JsonObject x=e.getAsJsonObject();if(!x.has("wasteSubclassificationId")||x.get("wasteSubclassificationId").isJsonNull()) throw new IllegalArgumentException("wasteSubclassificationId is required");waste.add(new ManualWasteInput(x.get("wasteClassificationId").getAsLong(),x.get("wasteSubclassificationId").getAsLong(),x.get("kilograms").getAsBigDecimal()));}
         }
         return new SaveManualKpiCommand(plant,line,date,expectedVersion,new ManualOeeSection(stops,mass),new ManualWasteSection(waste,tonnes));
     }

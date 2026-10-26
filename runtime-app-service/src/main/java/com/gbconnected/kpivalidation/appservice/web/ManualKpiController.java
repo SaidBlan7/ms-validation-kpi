@@ -21,6 +21,12 @@ public class ManualKpiController {
         LOG.info("event=manual_kpi_stop_catalog actorObject={} plantId={} lineId={} count={} correlationId={} result=OK",actor.objectId(),plantId,lineId,r.size(),correlation());
         return r;
     }
+    @GetMapping("/waste-catalog") public List<ManualWasteCatalogEntryView> wasteCatalog(@AuthenticationPrincipal Jwt jwt,@RequestParam long plantId,@RequestParam long lineId){
+        ActorContext actor=RequestActorContextResolver.resolve(jwt);
+        var r=useCase.wasteCatalog(actor,plantId,lineId);
+        LOG.info("event=manual_kpi_waste_catalog actorObject={} plantId={} lineId={} count={} correlationId={} result=OK",actor.objectId(),plantId,lineId,r.size(),correlation());
+        return r;
+    }
     @GetMapping public ManualKpiRecord get(@AuthenticationPrincipal Jwt jwt,@RequestParam long plantId,@RequestParam long lineId,@RequestParam LocalDate businessDate){
         ActorContext actor=RequestActorContextResolver.resolve(jwt); LOG.info("event=manual_kpi_selection actorObject={} plantId={} lineId={} businessDate={} correlationId={}",actor.objectId(),plantId,lineId,businessDate,correlation());
         try { ManualKpiRecord r=useCase.get(actor,plantId,lineId,businessDate); LOG.info("event=manual_kpi_read actorObject={} plantId={} lineId={} businessDate={} recordId={} correlationId={} result=OK",actor.objectId(),plantId,lineId,businessDate,r.recordId(),correlation()); return r; }

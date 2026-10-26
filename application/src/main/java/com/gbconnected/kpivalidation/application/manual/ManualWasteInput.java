@@ -1,3 +1,5 @@
 package com.gbconnected.kpivalidation.application.manual;
 import java.math.BigDecimal;
-public record ManualWasteInput(long wasteClassificationId, Long wasteSubclassificationId, BigDecimal kilograms) {}
+
+/** Spec 06: kilograms are always tied to a canonical waste subclassification. */
+public record ManualWasteInput(long wasteClassificationId, long wasteSubclassificationId, BigDecimal kilograms) {}

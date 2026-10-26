@@ -8,6 +8,7 @@ import com.gbconnected.kpivalidation.domain.manual.ManualKpiDatePolicy;
 import com.gbconnected.kpivalidation.domain.manual.ManualKpiDateSelection;
 import com.gbconnected.kpivalidation.domain.manual.ManualStopTimePolicy;
 import com.gbconnected.kpivalidation.domain.manual.ManualMassPerformancePolicy;
+import com.gbconnected.kpivalidation.domain.manual.ManualWastePolicy;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
@@ -17,6 +18,7 @@ public final class ManualKpiService implements ManualKpiUseCase {
     private final ManualKpiDatePolicy datePolicy = new ManualKpiDatePolicy();
     private final ManualStopTimePolicy stopTimePolicy = new ManualStopTimePolicy();
     private final ManualMassPerformancePolicy massPerformancePolicy = new ManualMassPerformancePolicy();
+    private final ManualWastePolicy wastePolicy = new ManualWastePolicy();
     private final AccessScopePort access;
     private final OperationalContextPort context;
     private final ActorIdentityPort identities;
@@ -54,6 +56,11 @@ public final class ManualKpiService implements ManualKpiUseCase {
         return references.activeStopClassifications(plantId);
     }
 
+    @Override public List<ManualWasteCatalogEntryView> wasteCatalog(ActorContext actor,long plantId,long lineId) {
+        authorizeScope(actor, plantId, lineId, true);
+        return references.activeWasteSubclassifications(plantId);
+    }
+
     @Override public ManualKpiRecord get(ActorContext actor,long plantId,long lineId,LocalDate businessDate) {
         authorizeScope(actor, plantId, lineId, false);
         if (!persistence.available()) throw new ManualKpiStorageUnavailableException("Canonical Manual KPI persistence is not available");
@@ -65,11 +72,11 @@ public final class ManualKpiService implements ManualKpiUseCase {
         PlantContext plant = authorizeScope(actor, command.plantId(), command.lineId(), true);
         if (!persistence.available()) throw new ManualKpiStorageUnavailableException(
                 "Canonical database has no Manual KPI business entity. Data must provide canonical persistence before PostgreSQL writes can be enabled.");
-        validatePayload(command);
         ZoneId zone = zone(plant.timezoneName());
         Instant now = clock.instant();
         long userId = canonicalUser(actor);
         Optional<ManualKpiRecord> existing = persistence.find(command.plantId(), command.lineId(), command.businessDate());
+        validatePayload(command, existing.orElse(null));
         if (existing.isEmpty()) {
             if (command.expectedVersion()!=null) throw new ManualKpiConflictException("expectedVersion must be omitted when creating a new Manual KPI record");
             ManualKpiDateSelection selection = datePolicy.evaluate(command.businessDate(), zone, now);
@@ -110,7 +117,7 @@ public final class ManualKpiService implements ManualKpiUseCase {
         return i.canonicalUserId();
     }
 
-    private void validatePayload(SaveManualKpiCommand c) {
+    private void validatePayload(SaveManualKpiCommand c, ManualKpiRecord existing) {
         if (c.businessDate()==null) throw new IllegalArgumentException("businessDate is required");
         ManualOeeSection oee = c.oee()==null ? new ManualOeeSection(List.of(),null) : c.oee();
         ManualWasteSection waste = c.waste()==null ? new ManualWasteSection(List.of(),null) : c.waste();
@@ -131,15 +138,33 @@ public final class ManualKpiService implements ManualKpiUseCase {
         if (oee.massPerformance()!=null) {
             massPerformancePolicy.validate(oee.massPerformance().elaboratedMass(), oee.massPerformance().deliveredMass());
         }
+        Map<String,ManualWasteCatalogEntryView> activeWaste = new HashMap<>();
+        for (ManualWasteCatalogEntryView x : references.activeWasteSubclassifications(c.plantId())) {
+            activeWaste.put(wasteKey(x.wasteClassificationId(), x.wasteSubclassificationId()), x);
+        }
+        Set<String> historicalWaste = new HashSet<>();
+        if (existing != null && existing.waste() != null) {
+            for (ManualWasteInput x : existing.waste().waste()) {
+                historicalWaste.add(wasteKey(x.wasteClassificationId(), x.wasteSubclassificationId()));
+            }
+        }
         Set<String> wasteKeys = new HashSet<>();
         for (ManualWasteInput x:waste.waste()) {
-            if (x.wasteClassificationId()<=0 || negative(x.kilograms())) throw new DomainValidationException("Waste kilograms must be non-negative and reference a classification");
-            String key=x.wasteClassificationId()+":"+x.wasteSubclassificationId();
-            if (!wasteKeys.add(key)) throw new DomainValidationException("Duplicate waste classification/subclassification entry");
-            if (!references.validWasteClassification(x.wasteClassificationId(),x.wasteSubclassificationId())) throw new DomainValidationException("Unknown or inactive waste classification/subclassification");
+            if (x==null || x.wasteClassificationId()<=0 || x.wasteSubclassificationId()<=0) {
+                throw new DomainValidationException("Waste kilograms must be non-negative and reference a canonical waste subclassification");
+            }
+            wastePolicy.validateKilograms(x.kilograms());
+            String key=wasteKey(x.wasteClassificationId(),x.wasteSubclassificationId());
+            if (!wasteKeys.add(key)) throw new DomainValidationException("Duplicate waste subclassification entry");
+            boolean currentlyActive = activeWaste.containsKey(key);
+            boolean previouslyCaptured = historicalWaste.contains(key)
+                    && references.wasteSubclassificationExists(c.plantId(), x.wasteClassificationId(), x.wasteSubclassificationId());
+            if (!currentlyActive && !previouslyCaptured) {
+                throw new DomainValidationException("Unknown, inactive or out-of-scope waste subclassification: "+x.wasteSubclassificationId());
+            }
         }
         if (waste.producedTonnes()!=null && waste.producedTonnes().signum()<0) throw new DomainValidationException("producedTonnes must be non-negative");
     }
-    private static boolean negative(BigDecimal v){ return v==null || v.signum()<0; }
+    private static String wasteKey(long classificationId,long subclassificationId){ return classificationId+":"+subclassificationId; }
     private static ZoneId zone(String id){ try{return ZoneId.of(id);}catch(Exception e){throw new DomainValidationException("Plant timezone_name is invalid");} }
 }
