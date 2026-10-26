@@ -7,6 +7,7 @@ import com.gbconnected.kpivalidation.domain.DomainValidationException;
 import com.gbconnected.kpivalidation.domain.manual.ManualKpiDatePolicy;
 import com.gbconnected.kpivalidation.domain.manual.ManualKpiDateSelection;
 import com.gbconnected.kpivalidation.domain.manual.ManualStopTimePolicy;
+import com.gbconnected.kpivalidation.domain.manual.ManualMassPerformancePolicy;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
@@ -15,6 +16,7 @@ public final class ManualKpiService implements ManualKpiUseCase {
     private static final int EDIT_HOURS = 8;
     private final ManualKpiDatePolicy datePolicy = new ManualKpiDatePolicy();
     private final ManualStopTimePolicy stopTimePolicy = new ManualStopTimePolicy();
+    private final ManualMassPerformancePolicy massPerformancePolicy = new ManualMassPerformancePolicy();
     private final AccessScopePort access;
     private final OperationalContextPort context;
     private final ActorIdentityPort identities;
@@ -36,6 +38,8 @@ public final class ManualKpiService implements ManualKpiUseCase {
                 "PLANT_LOCAL_DATE_START_WITHIN_EXACT_ROLLING_96_HOURS", true, true, true, false,
                 "FIXED_24_HOUR_INTERVAL_FROM_PLANT_LOCAL_DAY_START", "ABSOLUTE_8_HOURS_FROM_FIRST_SAVE", true,
                 ManualStopTimePolicy.CAPTURE_UNIT, ManualStopTimePolicy.DAILY_HOURS.intValueExact(), true,
+                List.of(ManualMassPerformancePolicy.ELABORATED_VARIABLE, ManualMassPerformancePolicy.DELIVERED_VARIABLE), true,
+                "NO_ORDERING_CONSTRAINT_DELIVERED_MAY_EXCEED_ELABORATED", "PRESERVE_DECIMAL_NO_APPLICATION_ROUNDING",
                 "AUTOMATIC_WINS_MANUAL_RETAINED_FOR_TRACEABILITY", "HISTORICAL_READ_ONLY_AFTER_DEACTIVATION",
                 activation.configurationCode(), authorization.capabilityCode(), persistence.available(), persistence.source());
     }
@@ -108,7 +112,7 @@ public final class ManualKpiService implements ManualKpiUseCase {
 
     private void validatePayload(SaveManualKpiCommand c) {
         if (c.businessDate()==null) throw new IllegalArgumentException("businessDate is required");
-        ManualOeeSection oee = c.oee()==null ? new ManualOeeSection(List.of(),List.of()) : c.oee();
+        ManualOeeSection oee = c.oee()==null ? new ManualOeeSection(List.of(),null) : c.oee();
         ManualWasteSection waste = c.waste()==null ? new ManualWasteSection(List.of(),null) : c.waste();
         if (oee.empty() && waste.empty()) throw new DomainValidationException("At least one OEE or waste value is required");
 
@@ -124,11 +128,8 @@ public final class ManualKpiService implements ManualKpiUseCase {
         }
         stopTimePolicy.validate(stopHours);
 
-        Set<Long> metricIds = new HashSet<>();
-        for (ManualPerformanceInput x:oee.performance()) {
-            if (x.metricDefinitionId()<=0 || x.uomId()<=0 || negative(x.value())) throw new DomainValidationException("Performance values must be non-negative and reference metric/UOM");
-            if (!metricIds.add(x.metricDefinitionId())) throw new DomainValidationException("Duplicate performance metric in OEE section");
-            if (!references.activeMetricDefinition(x.metricDefinitionId()) || !references.activeUom(x.uomId())) throw new DomainValidationException("Unknown or inactive metric/UOM in OEE section");
+        if (oee.massPerformance()!=null) {
+            massPerformancePolicy.validate(oee.massPerformance().elaboratedMass(), oee.massPerformance().deliveredMass());
         }
         Set<String> wasteKeys = new HashSet<>();
         for (ManualWasteInput x:waste.waste()) {

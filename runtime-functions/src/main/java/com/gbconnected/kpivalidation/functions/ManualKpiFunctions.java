@@ -66,17 +66,17 @@ public class ManualKpiFunctions {
     private static SaveManualKpiCommand parse(JsonObject b){
         long plant=b.get("plantId").getAsLong(), line=b.get("lineId").getAsLong(); LocalDate date=LocalDate.parse(b.get("businessDate").getAsString());
         Long expectedVersion=b.has("expectedVersion")&&!b.get("expectedVersion").isJsonNull()?b.get("expectedVersion").getAsLong():null;
-        List<ManualStopTimeInput> stops=new ArrayList<>(); List<ManualPerformanceInput> perf=new ArrayList<>(); List<ManualWasteInput> waste=new ArrayList<>(); BigDecimal tonnes=null;
+        List<ManualStopTimeInput> stops=new ArrayList<>(); ManualMassPerformanceInput mass=null; List<ManualWasteInput> waste=new ArrayList<>(); BigDecimal tonnes=null;
         if(b.has("oee")&&!b.get("oee").isJsonNull()){
             JsonObject o=b.getAsJsonObject("oee");
             if(o.has("stopTimes")&&o.get("stopTimes").isJsonArray()) for(JsonElement e:o.getAsJsonArray("stopTimes")){JsonObject x=e.getAsJsonObject();stops.add(new ManualStopTimeInput(x.get("stopClassificationId").getAsLong(),x.get("hours").getAsBigDecimal()));}
-            if(o.has("performance")&&o.get("performance").isJsonArray()) for(JsonElement e:o.getAsJsonArray("performance")){JsonObject x=e.getAsJsonObject();perf.add(new ManualPerformanceInput(x.get("metricDefinitionId").getAsLong(),x.get("value").getAsBigDecimal(),x.get("uomId").getAsLong()));}
+            if(o.has("massPerformance")&&!o.get("massPerformance").isJsonNull()){JsonObject x=o.getAsJsonObject("massPerformance");BigDecimal elaborated=x.has("elaboratedMass")&&!x.get("elaboratedMass").isJsonNull()?x.get("elaboratedMass").getAsBigDecimal():null;BigDecimal delivered=x.has("deliveredMass")&&!x.get("deliveredMass").isJsonNull()?x.get("deliveredMass").getAsBigDecimal():null;mass=new ManualMassPerformanceInput(elaborated,delivered);}
         }
         if(b.has("waste")&&!b.get("waste").isJsonNull()){
             JsonObject w=b.getAsJsonObject("waste"); if(w.has("producedTonnes")&&!w.get("producedTonnes").isJsonNull()) tonnes=w.get("producedTonnes").getAsBigDecimal();
             if(w.has("entries")&&w.get("entries").isJsonArray()) for(JsonElement e:w.getAsJsonArray("entries")){JsonObject x=e.getAsJsonObject();Long sub=x.has("wasteSubclassificationId")&&!x.get("wasteSubclassificationId").isJsonNull()?x.get("wasteSubclassificationId").getAsLong():null;waste.add(new ManualWasteInput(x.get("wasteClassificationId").getAsLong(),sub,x.get("kilograms").getAsBigDecimal()));}
         }
-        return new SaveManualKpiCommand(plant,line,date,expectedVersion,new ManualOeeSection(stops,perf),new ManualWasteSection(waste,tonnes));
+        return new SaveManualKpiCommand(plant,line,date,expectedVersion,new ManualOeeSection(stops,mass),new ManualWasteSection(waste,tonnes));
     }
     private static HttpResponseMessage json(HttpRequestMessage<?> req,HttpStatus status,Object body,String corr){return req.createResponseBuilder(status).header(CORRELATION,corr).header("Content-Type","application/json").body(JsonCodec.GSON.toJson(body)).build();}
     private static HttpResponseMessage reject(HttpRequestMessage<?> req,HttpStatus status,Exception e,String corr){return req.createResponseBuilder(status).header(CORRELATION,corr).body(JsonCodec.GSON.toJson(Map.of("error",e.getMessage()==null?"Request rejected":e.getMessage()))).build();}

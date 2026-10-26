@@ -1,5 +1,7 @@
 package com.gbconnected.kpivalidation.application.manual;
 
+import java.util.List;
+
 public record ManualKpiPolicyView(
         int historicalWindowHours,
         int editWindowHours,
@@ -15,6 +17,10 @@ public record ManualKpiPolicyView(
         String stopTimeCaptureUnit,
         int maxDailyStopHours,
         boolean optimisticConcurrencyRequired,
+        List<String> massPerformanceVariables,
+        boolean massPerformanceDecimalsAllowed,
+        String massPerformanceRelationPolicy,
+        String massPerformancePrecisionPolicy,
         String automaticPrecedence,
         String deactivationBehavior,
         String featureConfigurationCode,

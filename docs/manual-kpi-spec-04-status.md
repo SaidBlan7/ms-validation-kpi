@@ -37,8 +37,7 @@ Ejemplo de sección OEE:
     "stopTimes": [
       { "stopClassificationId": 101, "hours": 1.25 },
       { "stopClassificationId": 102, "hours": 0.5 }
-    ],
-    "performance": []
+    ]
   }
 }
 ```

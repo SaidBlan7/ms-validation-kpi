@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.16.0
-  description: Specs 01-07 KPI Validation plus KPI Manuales Specs 01-04. Spec 04 captures stop time in decimal hours, resolves the canonical stop-classification catalog by plant organization and enforces an exact 24-hour daily maximum plus optimistic concurrency. Manual capture remains isolated from Validation/Approval KPI and PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
+  version: 0.17.0
+  description: Specs 01-07 KPI Validation plus KPI Manuales Specs 01-05. Spec 05 captures explicit elaborated/delivered mass performance inputs as non-negative decimals without imposing delivered<=elaborated or application rounding. Spec 04 stop-time and optimistic-concurrency rules remain active. Manual capture stays isolated from Validation/Approval KPI and PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
 paths:
   /api/v1/manual-kpis/policy:
     get:
@@ -72,15 +72,13 @@ paths:
                         properties:
                           stopClassificationId: { type: integer, format: int64 }
                           hours: { type: number, minimum: 0, maximum: 24, description: Decimal hours. The sum of all stopTimes must be <= 24 exactly. }
-                    performance:
-                      type: array
-                      items:
-                        type: object
-                        required: [metricDefinitionId, value, uomId]
-                        properties:
-                          metricDefinitionId: { type: integer, format: int64 }
-                          value: { type: number, minimum: 0 }
-                          uomId: { type: integer, format: int64 }
+                    massPerformance:
+                      type: object
+                      description: Spec 05 manual OEE performance inputs. Both values are required when this block is present. Decimal precision is preserved and deliveredMass may exceed elaboratedMass.
+                      required: [elaboratedMass, deliveredMass]
+                      properties:
+                        elaboratedMass: { type: number, minimum: 0 }
+                        deliveredMass: { type: number, minimum: 0 }
                 waste:
                   type: object
                   properties:
@@ -100,7 +98,7 @@ paths:
         '401': { description: Authentication required }
         '403': { description: Plant/line/capability scope denied }
         '409': { description: Optimistic concurrency conflict or invalid expectedVersion usage }
-        '422': { description: Business rule violation, including stop-time total > 24 hours or expired edit window }
+        '422': { description: Business rule violation, including stop-time total > 24 hours, invalid manual mass values or expired edit window }
         '503': { description: Canonical Manual KPI persistence is not yet available in PostgreSQL/Lakebase }
   /api/v1/manual-kpis/scope/me:
     get:

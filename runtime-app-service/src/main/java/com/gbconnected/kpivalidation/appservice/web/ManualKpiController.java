@@ -34,9 +34,9 @@ public class ManualKpiController {
     private static SaveManualKpiCommand toCommand(ManualKpiHttpRequest r){
         if(r==null) throw new IllegalArgumentException("JSON body is required");
         var stops=r.oee()==null||r.oee().stopTimes()==null?List.<ManualStopTimeInput>of():r.oee().stopTimes().stream().map(x->new ManualStopTimeInput(x.stopClassificationId(),x.hours())).toList();
-        var perf=r.oee()==null||r.oee().performance()==null?List.<ManualPerformanceInput>of():r.oee().performance().stream().map(x->new ManualPerformanceInput(x.metricDefinitionId(),x.value(),x.uomId())).toList();
+        ManualMassPerformanceInput mass=r.oee()==null||r.oee().massPerformance()==null?null:new ManualMassPerformanceInput(r.oee().massPerformance().elaboratedMass(),r.oee().massPerformance().deliveredMass());
         var wastes=r.waste()==null||r.waste().entries()==null?List.<ManualWasteInput>of():r.waste().entries().stream().map(x->new ManualWasteInput(x.wasteClassificationId(),x.wasteSubclassificationId(),x.kilograms())).toList();
-        return new SaveManualKpiCommand(r.plantId(),r.lineId(),r.businessDate(),r.expectedVersion(),new ManualOeeSection(stops,perf),new ManualWasteSection(wastes,r.waste()==null?null:r.waste().producedTonnes()));
+        return new SaveManualKpiCommand(r.plantId(),r.lineId(),r.businessDate(),r.expectedVersion(),new ManualOeeSection(stops,mass),new ManualWasteSection(wastes,r.waste()==null?null:r.waste().producedTonnes()));
     }
     private static String correlation(){String x=MDC.get("correlationId");return x==null?"":x;}
     private static String safe(RuntimeException e){String x=e.getMessage();return x==null||x.isBlank()?e.getClass().getSimpleName():x;}

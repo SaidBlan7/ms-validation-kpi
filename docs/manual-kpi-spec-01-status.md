@@ -15,11 +15,11 @@ Reglas implementadas:
 - Al vencer las 8 horas, el registro queda bloqueado para edición.
 - Desactivar el feature bloquea nuevas altas/ediciones, pero no elimina ni oculta históricos existentes.
 - Precedencia resuelta con criterio operacional: **AUTOMATIC_WINS**. Si posteriormente existe dato automático para el mismo alcance/fecha, el automático debe ser el valor efectivo de reporte y el manual debe conservarse como evidencia histórica.
-- OEE manual acepta tiempos por `stopClassificationId + hours` (horas decimales) y rendimiento por `metricDefinitionId + value + uomId`.
+- OEE manual acepta tiempos por `stopClassificationId + hours` (horas decimales) y rendimiento explícito mediante `ELABORATED_MASS` + `DELIVERED_MASS` (`oee.massPerformance.elaboratedMass/deliveredMass`).
 - Los tiempos OEE son no negativos, sin duplicados por clasificación y con máximo total diario exacto de 24 horas; la suma se valida con `BigDecimal`.
 - Las actualizaciones usan `expectedVersion` como optimistic lock para evitar pérdida silenciosa de cambios concurrentes.
 - Desperdicio manual acepta kg por clasificación/subclasificación y toneladas producidas; no se permiten negativos ni duplicados de clasificación/subclasificación.
-- Referencias se validan contra catálogos canónicos: `stops.stop_classification`, `kpi.metric_definition`, `core.unit_of_measure`, `waste.waste_classification` y `waste.waste_subclassification`.
+- Referencias se validan contra catálogos canónicos cuando aplican: `stops.stop_classification`, `waste.waste_classification` y `waste.waste_subclassification`. El bloque manual de masas usa variables semánticas explícitas y no obliga al cliente a escoger IDs de métrica/UOM.
 - El contrato de persistencia conserva actor canónico, creación, actualización, `editableUntil`, versión, correlación y eventos de auditoría CREATE/UPDATE.
 - Adapter `memory` queda funcional para pruebas locales end-to-end.
 - App Service y Azure Functions exponen política, evaluación de selección de fecha, consulta y guardado del módulo.
@@ -53,7 +53,7 @@ La base canónica entregada **no contiene una entidad de negocio para almacenar 
 
 - cabecera diaria manual por planta/línea/fecha;
 - sección OEE de tiempos por clasificación;
-- sección OEE de métricas de rendimiento;
+- sección OEE de masas elaboradas y entregadas como entradas diferenciadas de rendimiento;
 - sección de desperdicio por clasificación/subclasificación;
 - toneladas producidas;
 - primera creación, versión/revisiones y ventana de edición de 8 horas;
