@@ -1,11 +1,10 @@
-# Aprobación KPI — Spec 02
+# Revisión integral - fixes
 
-Este paquete contiene únicamente archivos nuevos/modificados para cerrar la Spec 02 sobre el micro vigente.
+Archivos modificados tras revisar Validación KPI, KPI Manuales y Aprobación KPI.
 
-Implementa asignación/revocación de jefaturas por planta usando `app_security.user_role_assignment`, con `user_plant_access` como prerrequisito y auditoría canónica. La autorización de decisión queda restringida a asignación específica de planta.
+## Corrección
+En modo `memory`, las administraciones de alcance de KPI Manuales y Aprobación KPI mantenían un estado separado del adapter de autorización. Por ello una revocación podía reflejarse en el endpoint administrativo pero no en el permiso funcional.
 
-Configuración nueva:
-- `GBC_KPI_APPROVER_ROLE_CODE` (default `KPI_APPROVER`)
-- `GBC_KPI_APPROVAL_SCOPE_ADMIN_CAPABILITY_CODE` (default `KPI_APPROVAL_SCOPE_ADMIN`)
+Los adapters memory ahora comparten el estado de autorización con la administración y `MicroserviceRuntime` cablea las mismas instancias.
 
-La capability de decisión continúa en `GBC_KPI_APPROVER_CAPABILITY_CODE` (default `KPI_APPROVAL`).
+PostgreSQL no requirió cambios.

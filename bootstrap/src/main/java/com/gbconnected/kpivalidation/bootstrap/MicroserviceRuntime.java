@@ -93,23 +93,28 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 actorIdentity = new InMemoryActorIdentityAdapter(tenant, user, Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")));
                 validationPersistence = new InMemoryValidationPersistenceAdapter();
                 approvalPersistence = (KpiApprovalPersistencePort) validationPersistence;
-                approvalAuthorization = new InMemoryKpiApprovalAuthorizationAdapter(tenant, user,
+                var memoryApprovalAuthorization = new InMemoryKpiApprovalAuthorizationAdapter(tenant, user,
                         Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")), plant);
+                approvalAuthorization = memoryApprovalAuthorization;
                 approvalFeatureActivation = FeatureActivationPort.enabledByDefault(
                         env.getOrDefault("GBC_KPI_APPROVAL_FEATURE_CODE", "KPI_APPROVAL_ENABLED"));
                 approvalScopeAdministration = new InMemoryKpiApprovalScopeAdministrationAdapter(tenant, user,
                         Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")), plant,
-                        env.getOrDefault("GBC_KPI_APPROVAL_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_APPROVAL_SCOPE_ADMIN"));
+                        env.getOrDefault("GBC_KPI_APPROVAL_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_APPROVAL_SCOPE_ADMIN"),
+                        memoryApprovalAuthorization);
                 featureActivation = FeatureActivationPort.enabledByDefault(env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 String manualCapability = env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY");
-                manualAuthorization = new InMemoryManualKpiAuthorizationAdapter(tenant, user, plant, manualCapability);
+                var memoryManualAuthorization = new InMemoryManualKpiAuthorizationAdapter(tenant, user,
+                        Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")), plant, manualCapability);
+                manualAuthorization = memoryManualAuthorization;
                 manualReferences = new InMemoryManualKpiReferenceAdapter();
                 manualPersistence = new InMemoryManualKpiPersistenceAdapter();
                 manualFeatureActivation = FeatureActivationPort.enabledByDefault(env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
                 manualScope = new InMemoryManualKpiScopeAdapter(tenant, user, plant, line, timezone);
                 manualScopeAdministration = new InMemoryManualKpiScopeAdministrationAdapter(tenant, user,
                         Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")), plant,
-                        env.getOrDefault("GBC_MANUAL_KPI_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_MANUAL_SCOPE_ADMIN"));
+                        env.getOrDefault("GBC_MANUAL_KPI_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_MANUAL_SCOPE_ADMIN"),
+                        memoryManualAuthorization);
             }
             case "postgres-password" -> {
                 HikariDataSource ds = PooledDataSourceFactory.createPasswordDataSource(settings);
