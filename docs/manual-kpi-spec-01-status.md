@@ -49,15 +49,22 @@ Los códigos pueden sobrescribirse con `GBC_MANUAL_KPI_FEATURE_CODE` y `GBC_MANU
 
 ## Persistencia canónica confirmada por Data
 
-Data confirmó que KPI Manuales debe persistirse utilizando `kpi.kpi_result`. El micro deja de operar fail-closed en PostgreSQL/Lakebase y usa un `JdbcManualKpiPersistenceAdapter` real.
+La base canónica vigente separa los **source facts manuales** del resultado consolidado:
+
+- `stops.daily_classification_time` es la fuente canónica para tiempos OEE manuales diarios por línea/clasificación.
+- `waste.daily_manual_quantity` es la fuente canónica para kg manuales diarios por planta/línea/subclasificación.
+- `kpi.kpi_result` continúa siendo la salida consolidada/versionada de KPI Manuales con `source_mode = MANUAL`.
 
 Criterio implementado:
 
-- `source_mode = MANUAL`.
+- Source facts + nueva versión de `kpi_result` se escriben en **una sola transacción PostgreSQL**.
 - Una fila append-only de `kpi.kpi_result` por versión del registro manual.
-- `source_snapshot` conserva la captura compuesta (OEE, masas, desperdicio, toneladas), timezone snapshot, versión, actor, timestamps, correlación y eventos CREATE/UPDATE.
+- Nuevos snapshots usan `schema = MANUAL_KPI_V2` e incluyen los IDs de `daily_classification_time` y `daily_manual_quantity` usados por la versión.
+- Los snapshots `MANUAL_KPI_V1` existentes siguen siendo legibles para compatibilidad histórica.
+- Tiempos y kg se leen de las nuevas tablas canónicas en V2; masas elaboradas/entregadas y toneladas producidas permanecen en `source_snapshot` porque la base vigente no define otra entidad source-fact para ellas.
+- `source_snapshot` conserva además timezone, versión, actor, timestamps, correlación y eventos CREATE/UPDATE.
 - El primer `kpi_result_id` se conserva como `recordId` estable del registro manual.
-- Las actualizaciones no sobrescriben versiones anteriores.
+- Las actualizaciones no sobrescriben versiones anteriores de `kpi_result`; las tablas source-fact conservan auditoría por trigger.
 - Concurrencia por `plantId + lineId + businessDate` se serializa en PostgreSQL y sigue exigiendo `expectedVersion`.
 - `period_start` parte del inicio local de `businessDate`; `period_end` se fija a +24 horas conforme a la regla funcional cerrada.
 

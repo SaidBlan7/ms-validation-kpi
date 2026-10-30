@@ -55,11 +55,10 @@ Sin cambios. Masas elaboradas/entregadas siguen siendo el bloque de rendimiento 
 Se hace explícita la unidad de `producedTonnes` como toneladas y se conserva `kilograms` exclusivamente para cada subclasificación de desperdicio.
 
 ## Persistencia canónica cerrada
-- Data confirmó `kpi.kpi_result` como persistencia canónica de KPI Manuales.
-- La captura se persiste con `source_mode = MANUAL`.
-- `producedTonnes` se conserva dentro de `source_snapshot.waste.producedTonnes`, separado de `source_snapshot.waste.waste[*].kilograms`.
-- El mismo snapshot conserva planta/línea/fecha, actor, timestamps, versión, correlación y el resto de la captura manual para reconstrucción y auditoría.
-- La lectura PostgreSQL reconstruye `producedTonnes` desde el mismo `source_snapshot`; no es una escritura de solo ida.
+- La nueva base canónica agrega source facts específicos para kg de desperdicio, pero **no agrega una entidad específica para toneladas producidas**.
+- `producedTonnes` continúa en `kpi.kpi_result.source_snapshot.waste.producedTonnes` con `source_mode = MANUAL`, separado de los kg ahora persistidos en `waste.daily_manual_quantity`.
+- El snapshot conserva planta/línea/fecha, actor, timestamps, versión y correlación.
+- La lectura PostgreSQL reconstruye `producedTonnes` desde el snapshot V1/V2.
 
 ## Pendientes externos reales
 1. La precisión decimal máxima y cualquier límite operativo máximo por línea/planta no están definidos por la spec ni por la base canónica actual; no se inventa una restricción.

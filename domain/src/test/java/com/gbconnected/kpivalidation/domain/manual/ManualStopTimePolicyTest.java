@@ -25,6 +25,11 @@ class ManualStopTimePolicyTest {
                 () -> policy.validate(List.of(new BigDecimal("23.999999"), new BigDecimal("0.000002"))));
     }
 
+    @Test void rejectsSubSecondPrecisionBecauseCanonicalStorageUsesWholeSeconds() {
+        assertThrows(DomainValidationException.class,
+                () -> policy.validate(List.of(new BigDecimal("0.0001"))));
+    }
+
     @Test void rejectsNegativeValues() {
         assertThrows(DomainValidationException.class,
                 () -> policy.validate(List.of(new BigDecimal("-0.01"))));

@@ -183,7 +183,7 @@ paths:
         '404': { description: Manual KPI record not found }
     put:
       summary: Creates or updates the daily Manual KPI capture inside the 8-hour edit window
-      description: For a new daily record, validates the exact inclusive 96-hour plant-local date-selection window plus canonical scope/catalogs, feature activation and non-negative values. For an existing record, the independent 8-hour window from first save remains authoritative even if the business date has since crossed outside the 96-hour selection window. Automatic data has precedence downstream while the manual record remains traceable. PostgreSQL/Lakebase persists versioned Manual KPI captures in kpi.kpi_result with source_mode=MANUAL; source_snapshot retains the composite manual evidence and audit trace.
+      description: For a new daily record, validates the exact inclusive 96-hour plant-local date-selection window plus canonical scope/catalogs, feature activation and non-negative values. For an existing record, the independent 8-hour window from first save remains authoritative even if the business date has since crossed outside the 96-hour selection window. Automatic data has precedence downstream while the manual record remains traceable. PostgreSQL/Lakebase persists manual stop-time source facts in stops.daily_classification_time and waste-kg source facts in waste.daily_manual_quantity, then writes the versioned consolidated capture to kpi.kpi_result with source_mode=MANUAL in the same transaction. source_snapshot V2 retains source-fact ids plus composite evidence/audit trace; V1 snapshots remain readable.
       requestBody:
         required: true
         content:
@@ -206,7 +206,7 @@ paths:
                         required: [stopClassificationId, hours]
                         properties:
                           stopClassificationId: { type: integer, format: int64 }
-                          hours: { type: number, minimum: 0, maximum: 24, description: Decimal hours. The sum of all stopTimes must be <= 24 exactly. }
+                          hours: { type: number, minimum: 0, maximum: 24, description: Decimal hours. The sum of all stopTimes must be <= 24 exactly. Canonical persistence normalizes to whole duration_seconds, so values finer than one second are rejected rather than rounded. }
                     massPerformance:
                       type: object
                       description: Spec 05 manual OEE performance inputs. Both values are required when this block is present. Decimal precision is preserved and deliveredMass may exceed elaboratedMass.
@@ -225,7 +225,7 @@ paths:
                         properties:
                           wasteClassificationId: { type: integer, format: int64 }
                           wasteSubclassificationId: { type: integer, format: int64, description: Required stable canonical waste subclassification reference. }
-                          kilograms: { type: number, minimum: 0 }
+                          kilograms: { type: number, minimum: 0, description: Persisted canonically in waste.daily_manual_quantity using the active KG unit_of_measure. }
                     producedTonnes: { type: number, minimum: 0, description: Manual production quantity in metric tonnes. Distinct from waste kilograms; zero and decimals are allowed. No application rounding or maximum is imposed. }
       responses:
         '200': { description: Manual KPI record created or updated }

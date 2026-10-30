@@ -1,7 +1,7 @@
 # KPI Manuales — Spec 08: Fecha, hora y usuario de registro
 
 ## Estado
-Implementada para el flujo manual tanto en `memory` como sobre la persistencia PostgreSQL canónica de KPI Manuales en `kpi.kpi_result`. La trazabilidad de creación/actualización se conserva dentro del `source_snapshot` versionado, sin requerir un esquema adicional para esta Spec 08.
+Implementada para `memory` y PostgreSQL. La trazabilidad del registro consolidado se conserva en `kpi_result.source_snapshot`; adicionalmente, los nuevos source facts de tiempos y desperdicio tienen `recorded_by/recorded_at`, `updated_by/updated_at` y triggers de auditoría canónicos.
 
 ## Reglas cerradas
 - Se conserva siempre el `user_id` canónico que creó el registro.
@@ -39,4 +39,4 @@ Sin cambios en las reglas numéricas/catálogos. Todos los cambios realizados so
 ## Base canónica
 `app_security.user_identity` ya permite resolver `user_id`, `display_name` y estado del usuario. `core.plant.timezone_name` sigue siendo fuente autoritativa al crear el registro.
 
-La persistencia canónica de KPI Manuales ya está cerrada con la decisión de Data de utilizar `kpi.kpi_result`. El registro manual se persiste con `source_mode = MANUAL` y el `source_snapshot` versionado conserva `createdByUserId`, `createdAt`, `updatedByUserId`, `updatedAt`, `editableUntil`, `plantTimezone`, correlación y eventos CREATE/UPDATE. No se requiere una entidad adicional para cerrar esta Spec 08.
+La persistencia canónica vigente usa `stops.daily_classification_time` y `waste.daily_manual_quantity` como source facts para tiempos/kg, ambos auditados mediante `audit.capture_change`, y `kpi.kpi_result` como resultado consolidado/versionado. El snapshot conserva `createdByUserId`, `createdAt`, `updatedByUserId`, `updatedAt`, `editableUntil`, `plantTimezone`, correlación y eventos CREATE/UPDATE. Esta combinación cubre la trazabilidad requerida por la Spec 08.
