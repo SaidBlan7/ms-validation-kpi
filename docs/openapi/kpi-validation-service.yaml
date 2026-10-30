@@ -25,7 +25,7 @@ paths:
   /api/v1/manual-kpis/stop-classifications:
     get:
       summary: Lists active canonical stop classifications available for Manual OEE capture
-      description: Resolves the current plant organization and returns active global plus organization-scoped stop classifications. Organization-specific rows override a global row with the same classificationCode. oeeStopTypeCode is returned without hardcoding the catalog; PROGRAMMED and UNPROGRAMMED convenience flags are included for the current OEE grouping.
+      description: Resolves the current plant organization and returns active global plus organization-scoped stop classifications eligible for Manual KPI OEE capture. Only oeeStopTypeCode PROGRAMMED or UNPROGRAMMED are returned. Organization-specific rows override a global row with the same classificationCode.
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
         - { in: query, name: lineId, required: true, schema: { type: integer, format: int64 } }

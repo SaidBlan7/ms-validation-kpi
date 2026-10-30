@@ -1,16 +1,16 @@
 # KPI Manuales — Spec 04: Registro de tiempos por clasificación (efectividad)
 
 ## Estado
-Implementada en dominio, application, adapters de referencia, App Service y Azure Functions. No requiere DDL nuevo para el catálogo de clasificaciones. Sigue vigente el bloqueo de persistencia canónica de la Spec 01 para almacenar la captura manual en PostgreSQL/Lakebase.
+Implementada y cerrada en dominio, application, adapters de referencia/persistencia, App Service y Azure Functions. No requiere DDL nuevo para el catálogo de clasificaciones. La persistencia PostgreSQL ya está resuelta mediante `kpi.kpi_result` con `source_mode = MANUAL` y `source_snapshot`, conforme a la decisión de Data adoptada en la Spec 01.
 
 ## Decisiones cerradas
 - La unidad visible/contractual de captura es **hora decimal** (`hours`), no segundos enteros.
 - La suma se evalúa con `BigDecimal`, sin redondear antes de validar.
 - Se permiten valores `0`, una sola clasificación con `24`, y cualquier combinación decimal cuya suma sea `<= 24`.
 - `24` horas exactas son válidas; cualquier suma mayor a `24` se rechaza de forma atómica.
-- No se impone un número máximo artificial de decimales mientras no exista la columna canónica final de persistencia. El contrato conserva el decimal recibido y compara exactamente contra 24.
+- No se impone un número máximo artificial de decimales porque la especificación no lo define. El contrato conserva el decimal recibido y compara exactamente contra 24; la persistencia en `source_snapshot` conserva su representación decimal.
 - Las clasificaciones NO se hardcodean en producción. Se leen de `stops.stop_classification` y se exponen con `classificationCode`, `classificationName`, `displayOrder` y `oeeStopTypeCode`.
-- La separación programado/no programado proviene de `oee_stop_type_code`. Los valores actuales `PROGRAMMED` y `UNPROGRAMMED` se exponen además como flags de conveniencia, sin cerrar el catálogo a futuros códigos.
+- La separación programado/no programado proviene de `oee_stop_type_code`. Para esta captura se aceptan únicamente las clasificaciones activas con `PROGRAMMED` o `UNPROGRAMMED`; cualquier otro código extensible del catálogo queda fuera de KPI Manuales hasta que una especificación futura lo incorpore explícitamente.
 - Para una planta se consideran las clasificaciones globales (`organization_id IS NULL`) y las de su organización vigente. Si el mismo `classification_code` existe global y específico de organización, prevalece el específico de organización.
 - No existe en la base canónica una relación clasificación-línea que marque “no aplicable”. Por deber-ser, el micro muestra el catálogo canónico aplicable al contexto organizacional; una categoría que la operación no use puede enviarse en cero u omitirse. No se inventa ocultamiento por línea.
 - La edición sigue limitada por las 8 horas definidas en Specs 01/03.
@@ -73,8 +73,8 @@ Para alta nueva se omite `expectedVersion`. Para edición debe enviarse la versi
 - `stops.stop_classification.is_active`
 - `core.plant_context_assignment` para resolver la organización vigente de la planta.
 
-## Pendiente real para Data
-No hay un pendiente nuevo exclusivo de esta Spec 04. Sigue pendiente el mismo requerimiento de la Spec 01: definir la entidad canónica de KPI Manuales y sus detalles. Cuando exista, el detalle de tiempos debe poder conservar al menos `stop_classification_id` y el valor decimal capturado (o una representación canónica equivalente sin pérdida), además de versionado/auditoría para soportar el control de concurrencia.
+## Persistencia canónica
+Los tiempos quedan dentro del `source_snapshot` de la versión correspondiente en `kpi.kpi_result`, conservando `stopClassificationId`, horas decimales, contexto planta/línea/fecha, versión y auditoría funcional. Cada actualización genera una nueva versión del resultado manual y la lectura recupera la versión más reciente.
 
-## Reporting
-La propagación a OEE 1/OEE 2/OEE completo sigue fuera de este repositorio. El consumidor deberá usar los tiempos manuales persistidos por clasificación cuando no exista fuente automática efectiva, respetando la precedencia `AUTOMATIC_WINS` ya cerrada en Spec 01.
+## Pendientes externos
+No existe un pendiente de modelo de datos exclusivo de esta Spec 04. La propagación efectiva a OEE 1/OEE 2/OEE completo depende de los consumidores/reporting externos a este repositorio; el micro deja los datos manuales persistidos y trazables para dicho consumo.
