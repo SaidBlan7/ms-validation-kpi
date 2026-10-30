@@ -54,10 +54,17 @@ Sin cambios. Masas elaboradas/entregadas siguen siendo el bloque de rendimiento 
 ### Spec 06
 Se hace explícita la unidad de `producedTonnes` como toneladas y se conserva `kilograms` exclusivamente para cada subclasificación de desperdicio.
 
-## Pendiente externo real
-1. Sigue pendiente la entidad canónica de persistencia de KPI Manuales solicitada desde la Spec 01. Debe poder conservar también las toneladas producidas del registro manual, además de los kg por subclasificación, usuario, timestamps, versionado y trazabilidad.
-2. La precisión decimal máxima y cualquier límite operativo máximo por línea/planta no están definidos por la spec ni por la base canónica actual; no se inventa una restricción.
-3. La propagación a reportes/indicadores PT/desperdicio es responsabilidad de los consumidores externos una vez exista la persistencia canónica.
+## Persistencia canónica cerrada
+- Data confirmó `kpi.kpi_result` como persistencia canónica de KPI Manuales.
+- La captura se persiste con `source_mode = MANUAL`.
+- `producedTonnes` se conserva dentro de `source_snapshot.waste.producedTonnes`, separado de `source_snapshot.waste.waste[*].kilograms`.
+- El mismo snapshot conserva planta/línea/fecha, actor, timestamps, versión, correlación y el resto de la captura manual para reconstrucción y auditoría.
+- La lectura PostgreSQL reconstruye `producedTonnes` desde el mismo `source_snapshot`; no es una escritura de solo ida.
+
+## Pendientes externos reales
+1. La precisión decimal máxima y cualquier límite operativo máximo por línea/planta no están definidos por la spec ni por la base canónica actual; no se inventa una restricción.
+2. La precedencia efectiva frente a una fuente automática posterior continúa siendo una regla downstream/negocio; la captura manual permanece trazable con `source_mode = MANUAL`.
+3. La propagación efectiva a reportes/indicadores PT/desperdicio depende de que esos consumidores lean el resultado/snapshot manual correspondiente.
 
 ## Ajuste incorporado por Spec 08
 Los cambios de `producedTonnes` quedan trazados con actor, timestamp, versión y correlación del mismo registro manual. La vista de trazabilidad conserva creación y actualizaciones sin reemplazar el autor/timestamp inicial.

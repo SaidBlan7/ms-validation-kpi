@@ -39,4 +39,4 @@ Sin cambios en las reglas numéricas/catálogos. Todos los cambios realizados so
 ## Base canónica
 `app_security.user_identity` ya permite resolver `user_id`, `display_name` y estado del usuario. `core.plant.timezone_name` sigue siendo fuente autoritativa al crear el registro.
 
-El bloqueo de Data sigue siendo el mismo de la Spec 01: falta la entidad canónica de persistencia de KPI Manuales donde deben almacenarse cabecera, actor/timestamps, timezone snapshot, versión y detalle/auditoría. No se agrega una segunda solicitud de esquema solo por esta Spec 08.
+La persistencia canónica de KPI Manuales ya está cerrada con la decisión de Data de utilizar `kpi.kpi_result`. El registro manual se persiste con `source_mode = MANUAL` y el `source_snapshot` versionado conserva `createdByUserId`, `createdAt`, `updatedByUserId`, `updatedAt`, `editableUntil`, `plantTimezone`, correlación y eventos CREATE/UPDATE. No se requiere una entidad adicional para cerrar esta Spec 08.

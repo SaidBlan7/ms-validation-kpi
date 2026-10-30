@@ -1,8 +1,13 @@
-# KPI Manuales — cierre Spec 05
+# Cierre KPI Manuales — Spec 08
 
-Este paquete contiene únicamente archivos nuevos/modificados para cerrar la Spec 05 sobre el micro recibido.
+Archivos nuevos/modificados únicamente.
 
-Cambios incluidos:
-- `docs/manual-kpi-spec-05-status.md`: actualiza el estado a cerrado y documenta la persistencia real de masas elaboradas/entregadas en `kpi.kpi_result` con `source_mode=MANUAL` y `source_snapshot`.
+## Resultado
+- Spec 08 cerrada sobre la persistencia canónica actual en `kpi.kpi_result`.
+- No fue necesario cambiar Java: el micro ya conserva creador/creación, actualizador/actualización, `editableUntil`, timezone snapshot y eventos CREATE/UPDATE dentro de `source_snapshot`.
+- La ventana de edición permanece semiabierta: `[createdAt, createdAt + 8h)`; exactamente a +8h el registro ya está bloqueado.
+- `GET /api/v1/manual-kpis/trace` ya expone IDs de usuario estables y timestamps UTC/locales de planta.
+- No se requieren ajustes funcionales a Specs 01–07.
 
-No se modificó código Java porque el ZIP recibido ya contiene la implementación funcional completa de Spec 05, incluida la serialización/deserialización PostgreSQL de `elaboratedMass` y `deliveredMass`, validaciones y contratos HTTP.
+## Cambio incluido
+- `docs/manual-kpi-spec-08-status.md`: elimina el pendiente obsoleto de Data y documenta `kpi.kpi_result` + `source_mode=MANUAL` como persistencia canónica confirmada.
