@@ -11,6 +11,7 @@ import com.gbconnected.kpivalidation.application.manual.ManualKpiStorageUnavaila
 import com.gbconnected.kpivalidation.application.manual.scope.ManualKpiScopeConflictException;
 import com.gbconnected.kpivalidation.application.approval.ApprovalConflictException;
 import com.gbconnected.kpivalidation.application.approval.ApprovalNotFoundException;
+import com.gbconnected.kpivalidation.application.approval.scope.KpiApprovalScopeConflictException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +37,7 @@ public class ApiExceptionHandler {
     }
 
 
-    @ExceptionHandler({ValidationAlreadyExistsException.class, ValidatorAssignmentConflictException.class, ManualKpiScopeConflictException.class, ManualKpiConflictException.class, ApprovalConflictException.class})
+    @ExceptionHandler({ValidationAlreadyExistsException.class, ValidatorAssignmentConflictException.class, ManualKpiScopeConflictException.class, ManualKpiConflictException.class, ApprovalConflictException.class, KpiApprovalScopeConflictException.class})
     ResponseEntity<Map<String,String>> conflict(RuntimeException e) {
         LOG.warn("event=kpi_validation_request_rejected correlationId={} status=409 reason={}", correlationId(), safe(e.getMessage()));
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", safe(e.getMessage())));

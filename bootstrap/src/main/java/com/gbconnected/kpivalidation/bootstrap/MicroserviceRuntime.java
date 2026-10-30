@@ -16,6 +16,7 @@ import com.gbconnected.kpivalidation.application.port.out.*;
 import com.gbconnected.kpivalidation.application.manual.*;
 import com.gbconnected.kpivalidation.application.manual.scope.*;
 import com.gbconnected.kpivalidation.application.approval.*;
+import com.gbconnected.kpivalidation.application.approval.scope.*;
 import com.gbconnected.kpivalidation.application.port.out.manual.*;
 import com.gbconnected.kpivalidation.application.port.out.approval.*;
 import com.gbconnected.kpivalidation.domain.CorrectionReasonPolicy;
@@ -31,17 +32,19 @@ public final class MicroserviceRuntime implements AutoCloseable {
     private final ManualKpiScopeUseCase manualKpiScope;
     private final AdministerManualKpiScopeUseCase manualKpiScopeAdministration;
     private final KpiApprovalUseCase kpiApproval;
+    private final AdministerKpiApprovalScopeUseCase kpiApprovalScopeAdministration;
     private final AutoCloseable closeable;
 
     private MicroserviceRuntime(OeeValidationService validation, DatabaseHealthPort health, ManualKpiUseCase manualKpis,
             ManualKpiScopeUseCase manualKpiScope, AdministerManualKpiScopeUseCase manualKpiScopeAdministration,
-            KpiApprovalUseCase kpiApproval, AutoCloseable closeable) {
+            KpiApprovalUseCase kpiApproval, AdministerKpiApprovalScopeUseCase kpiApprovalScopeAdministration, AutoCloseable closeable) {
         this.validation = validation;
         this.health = health;
         this.manualKpis = manualKpis;
         this.manualKpiScope = manualKpiScope;
         this.manualKpiScopeAdministration = manualKpiScopeAdministration;
         this.kpiApproval = kpiApproval;
+        this.kpiApprovalScopeAdministration = kpiApprovalScopeAdministration;
         this.closeable = closeable;
     }
 
@@ -66,6 +69,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
         KpiApprovalPersistencePort approvalPersistence;
         KpiApprovalAuthorizationPort approvalAuthorization;
         FeatureActivationPort approvalFeatureActivation;
+        KpiApprovalScopeAdministrationPort approvalScopeAdministration = KpiApprovalScopeAdministrationPort.unavailable();
         AutoCloseable close = () -> { };
         DataSource sqlDataSource = null;
         String massSourceMode = env.getOrDefault("GBC_MASS_PERFORMANCE_SOURCE_MODE", "AUTO");
@@ -93,6 +97,9 @@ public final class MicroserviceRuntime implements AutoCloseable {
                         Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")), plant);
                 approvalFeatureActivation = FeatureActivationPort.enabledByDefault(
                         env.getOrDefault("GBC_KPI_APPROVAL_FEATURE_CODE", "KPI_APPROVAL_ENABLED"));
+                approvalScopeAdministration = new InMemoryKpiApprovalScopeAdministrationAdapter(tenant, user,
+                        Long.parseLong(env.getOrDefault("DEV_CANONICAL_USER_ID", "1")), plant,
+                        env.getOrDefault("GBC_KPI_APPROVAL_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_APPROVAL_SCOPE_ADMIN"));
                 featureActivation = FeatureActivationPort.enabledByDefault(env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 String manualCapability = env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY");
                 manualAuthorization = new InMemoryManualKpiAuthorizationAdapter(tenant, user, plant, manualCapability);
@@ -120,6 +127,10 @@ public final class MicroserviceRuntime implements AutoCloseable {
                         env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"));
                 approvalFeatureActivation = new JdbcFeatureActivationAdapter(ds,
                         env.getOrDefault("GBC_KPI_APPROVAL_FEATURE_CODE", "KPI_APPROVAL_ENABLED"));
+                approvalScopeAdministration = new JdbcKpiApprovalScopeAdministrationAdapter(ds,
+                        env.getOrDefault("GBC_KPI_APPROVER_ROLE_CODE", "KPI_APPROVER"),
+                        env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"),
+                        env.getOrDefault("GBC_KPI_APPROVAL_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_APPROVAL_SCOPE_ADMIN"));
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 manualAuthorization = new JdbcManualKpiAuthorizationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"));
                 manualReferences = new JdbcManualKpiReferenceAdapter(ds);
@@ -149,6 +160,10 @@ public final class MicroserviceRuntime implements AutoCloseable {
                         env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"));
                 approvalFeatureActivation = new JdbcFeatureActivationAdapter(ds,
                         env.getOrDefault("GBC_KPI_APPROVAL_FEATURE_CODE", "KPI_APPROVAL_ENABLED"));
+                approvalScopeAdministration = new JdbcKpiApprovalScopeAdministrationAdapter(ds,
+                        env.getOrDefault("GBC_KPI_APPROVER_ROLE_CODE", "KPI_APPROVER"),
+                        env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"),
+                        env.getOrDefault("GBC_KPI_APPROVAL_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_APPROVAL_SCOPE_ADMIN"));
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 manualAuthorization = new JdbcManualKpiAuthorizationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"));
                 manualReferences = new JdbcManualKpiReferenceAdapter(ds);
@@ -213,7 +228,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 actorIdentity, manualFeatureActivation, manualAuthorization, manualScope, manualScopeAdministration);
         KpiApprovalService approvalService = new KpiApprovalService(
                 actorIdentity, access, context, approvalFeatureActivation, approvalAuthorization, approvalPersistence, Clock.systemUTC());
-        return new MicroserviceRuntime(service, health, manualService, manualScopeService, manualScopeService, approvalService, close);
+        KpiApprovalScopeService approvalScopeService = new KpiApprovalScopeService(actorIdentity, approvalScopeAdministration);
+        return new MicroserviceRuntime(service, health, manualService, manualScopeService, manualScopeService, approvalService, approvalScopeService, close);
     }
 
     public CheckEligibilityUseCase eligibility() { return validation; }
@@ -244,6 +260,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
     public ManualKpiScopeUseCase manualKpiScope() { return manualKpiScope; }
     public AdministerManualKpiScopeUseCase manualKpiScopeAdministration() { return manualKpiScopeAdministration; }
     public KpiApprovalUseCase kpiApproval() { return kpiApproval; }
+    public AdministerKpiApprovalScopeUseCase kpiApprovalScopeAdministration() { return kpiApprovalScopeAdministration; }
 
     private static String requiredEnv(Map<String, String> env, String key) {
         String value = env.get(key);

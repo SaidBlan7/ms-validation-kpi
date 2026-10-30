@@ -1,9 +1,58 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.20.0
-  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data. Aprobación KPI Spec 01 añade revisión y decisión final sobre validaciones OEE canónicas; desperdicios queda condicionado a una fuente canónica de validaciones de waste.
+  version: 0.21.0
+  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data. Aprobación KPI Specs 01-02 añade revisión/decisión OEE y desperdicios, más asignación de jefaturas por planta mediante roles/capabilities canónicos. La autorización de aprobación exige asignación vigente específica de planta; revocaciones aplican en la siguiente petición.
 paths:
+  /api/v1/kpi-approval/scope/policy:
+    get:
+      summary: Returns Aprobación KPI Spec 02 plant-assignment policy
+      responses:
+        '200': { description: Cardinality, revocation and reassignment policy }
+  /api/v1/kpi-approval/scope/admin/assignments:
+    get:
+      summary: Lists KPI Approval jefatura assignments for a plant
+      parameters:
+        - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: Historical plant-scoped approver assignments }
+        '403': { description: Scope administration denied }
+    post:
+      summary: Assigns KPI Approval capability to a jefatura for one plant
+      description: Requires the target user to be active and already have generic user_plant_access for the plant. Creates a plant-scoped app_security.user_role_assignment and preserves canonical audit history.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, plantId]
+              properties:
+                targetUserId: { type: integer, format: int64 }
+                plantId: { type: integer, format: int64 }
+                reason: { type: string }
+      responses:
+        '200': { description: Created assignment }
+        '403': { description: Scope administration denied }
+        '409': { description: Effective assignment already exists or target lacks generic plant access }
+    delete:
+      summary: Revokes one plant-scoped KPI Approval assignment
+      description: Closes valid_to; it does not delete generic plant access. Revocation is effective on the next server request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, plantId, reason]
+              properties:
+                targetUserId: { type: integer, format: int64 }
+                plantId: { type: integer, format: int64 }
+                reason: { type: string }
+      responses:
+        '200': { description: Revoked assignment }
+        '403': { description: Scope administration denied }
+        '409': { description: No effective assignment exists }
   /api/v1/kpi-approval/policy:
     get:
       summary: Returns Aprobación KPI Spec 01 workflow policy

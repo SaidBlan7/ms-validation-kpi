@@ -1,13 +1,11 @@
-# Cierre Aprobación KPI – Spec 01 / Waste
+# Aprobación KPI — Spec 02
 
-Archivos nuevos/modificados únicamente.
+Este paquete contiene únicamente archivos nuevos/modificados para cerrar la Spec 02 sobre el micro vigente.
 
-## Ajuste
-- Aprobación KPI reutiliza `kpi.kpi_validation` / `kpi.kpi_validation_detail` también para validaciones de desperdicio.
-- Una validación se clasifica como `WASTE` cuando sus detalles referencian métricas canónicas cuyo `kpi.metric_definition.source_domain = 'WASTE'` y no mezcla detalles de paro OEE.
-- No se crea ni se requiere una FK directa a `waste.waste_event` o `waste.waste_subclassification` para el flujo de aprobación.
-- El ciclo de decisión sigue siendo `PENDING -> APPROVED/REJECTED/EXPIRED` con la auditoría existente.
-- `supportsWasteValidations()` queda habilitado.
+Implementa asignación/revocación de jefaturas por planta usando `app_security.user_role_assignment`, con `user_plant_access` como prerrequisito y auditoría canónica. La autorización de decisión queda restringida a asignación específica de planta.
 
-## Validación
-Los módulos `application` y `adapter-postgres` compilan con Java 21 después del ajuste.
+Configuración nueva:
+- `GBC_KPI_APPROVER_ROLE_CODE` (default `KPI_APPROVER`)
+- `GBC_KPI_APPROVAL_SCOPE_ADMIN_CAPABILITY_CODE` (default `KPI_APPROVAL_SCOPE_ADMIN`)
+
+La capability de decisión continúa en `GBC_KPI_APPROVER_CAPABILITY_CODE` (default `KPI_APPROVAL`).
