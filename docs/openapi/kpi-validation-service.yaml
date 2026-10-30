@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.21.0
-  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data. Aprobación KPI Specs 01-02 añade revisión/decisión OEE y desperdicios, más asignación de jefaturas por planta mediante roles/capabilities canónicos. La autorización de aprobación exige asignación vigente específica de planta; revocaciones aplican en la siguiente petición.
+  version: 0.22.0
+  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data. Aprobación KPI Specs 01-03 añade revisión/decisión OEE y desperdicios, asignación de jefaturas por planta y visualización histórica/filtrable de validaciones con detalle legible para Front. La autorización de aprobación exige asignación vigente específica de planta; revocaciones aplican en la siguiente petición.
 paths:
   /api/v1/kpi-approval/scope/policy:
     get:
@@ -66,6 +66,23 @@ paths:
         '200': { description: Pending validations in authorized plants }
         '401': { description: Authentication required }
         '403': { description: Approval scope denied }
+  /api/v1/kpi-approval/validations:
+    get:
+      summary: Lists KPI validations visible to the authenticated approver
+      description: Read-only historical list for Aprobación KPI Spec 03. Includes pending, approved, rejected and expired validations after applying server-side plant authorization. Default order is newest proposedAt first.
+      parameters:
+        - { in: query, name: status, required: false, schema: { type: string, enum: [PENDING, APPROVED, REJECTED, EXPIRED] } }
+        - { in: query, name: domain, required: false, schema: { type: string, enum: [OEE, WASTE] } }
+        - { in: query, name: plantId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: fromDate, required: false, schema: { type: string, format: date } }
+        - { in: query, name: toDate, required: false, schema: { type: string, format: date } }
+        - { in: query, name: offset, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { in: query, name: limit, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        '200': { description: Authorized validation page with total count and enriched original/proposed change details }
+        '401': { description: Authentication required }
+        '403': { description: Approval scope denied }
+        '400': { description: Invalid filters or pagination }
   /api/v1/kpi-approval/validations/{id}:
     get:
       summary: Gets one KPI validation for approval review

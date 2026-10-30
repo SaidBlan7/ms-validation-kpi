@@ -23,6 +23,22 @@ public final class KpiApprovalController {
         return result;
     }
 
+    @GetMapping("/validations")
+    public ApprovalValidationPageView list(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) Long plantId,
+            @RequestParam(required = false) java.time.LocalDate fromDate,
+            @RequestParam(required = false) java.time.LocalDate toDate,
+            @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "50") int limit) {
+        var query = new ApprovalValidationQuery(status, domain, plantId, fromDate, toDate, offset, limit);
+        var result = useCase.list(RequestActorContextResolver.resolve(jwt), query);
+        LOG.info("event=kpi_approval_list correlationId={} resultCount={} total={} offset={} limit={}",
+                correlationId(), result.items().size(), result.total(), result.offset(), result.limit());
+        return result;
+    }
+
     @GetMapping("/validations/{id}")
     public ApprovalValidationView get(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
         var result = useCase.get(RequestActorContextResolver.resolve(jwt), id);

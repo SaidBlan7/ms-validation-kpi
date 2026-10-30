@@ -17,6 +17,23 @@ public final class KpiApprovalService implements KpiApprovalUseCase {
         long user=actorUser(actor); persistence.expirePending(clock.instant(),null);
         return persistence.pending().stream().filter(v->authorized(actor,user,v)).toList();
     }
+    public ApprovalValidationPageView list(ActorContext actor,ApprovalValidationQuery query){
+        long user=actorUser(actor); persistence.expirePending(clock.instant(),null);
+        ApprovalValidationQuery q=query==null?ApprovalValidationQuery.defaults():query;
+        List<ApprovalValidationView> filtered=persistence.all().stream()
+                .filter(v->authorized(actor,user,v))
+                .filter(v->q.status()==null||q.status().equals(v.status()))
+                .filter(v->q.validationDomain()==null||q.validationDomain().equals(v.validationDomain()))
+                .filter(v->q.plantId()==null||q.plantId()==v.plantId())
+                .filter(v->q.fromDate()==null||!v.businessDate().isBefore(q.fromDate()))
+                .filter(v->q.toDate()==null||!v.businessDate().isAfter(q.toDate()))
+                .sorted(Comparator.comparing(ApprovalValidationView::proposedAt).reversed()
+                        .thenComparing(Comparator.comparingLong(ApprovalValidationView::validationId).reversed()))
+                .toList();
+        int from=Math.min(q.offset(),filtered.size());
+        int to=Math.min(from+q.limit(),filtered.size());
+        return new ApprovalValidationPageView(filtered.subList(from,to),q.offset(),q.limit(),filtered.size());
+    }
     public ApprovalValidationView get(ActorContext actor,long id){
         if(id<=0)throw new IllegalArgumentException("validationId must be positive"); long user=actorUser(actor);persistence.expirePending(clock.instant(),null);
         ApprovalValidationView v=persistence.find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found")); requireAuthorized(actor,user,v); return v;

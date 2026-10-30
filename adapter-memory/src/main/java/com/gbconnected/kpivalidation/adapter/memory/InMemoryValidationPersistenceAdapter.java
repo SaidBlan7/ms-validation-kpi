@@ -108,6 +108,16 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     }
 
     @Override
+    public List<ApprovalValidationView> all() {
+        return java.util.stream.Stream.concat(
+                        java.util.stream.Stream.concat(byId.values().stream().map(this::approval),
+                                stopById.values().stream().map(this::approval)),
+                        massById.values().stream().map(this::approval))
+                .sorted(java.util.Comparator.comparing(ApprovalValidationView::proposedAt).reversed())
+                .toList();
+    }
+
+    @Override
     public Optional<ApprovalValidationView> find(long validationId) {
         if (byId.containsKey(validationId)) return Optional.of(approval(byId.get(validationId)));
         if (stopById.containsKey(validationId)) return Optional.of(approval(stopById.get(validationId)));
@@ -184,28 +194,35 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     }
 
     private ApprovalValidationView approval(OeeValidationResult r) {
+        String proposer = r.auditEvidence() == null ? null : r.auditEvidence().displayNameSnapshot();
         return new ApprovalValidationView(r.validationId(), "OEE", "KPI_RESULT", r.status(), r.plantId(), r.lineId(),
                 r.businessDate(), r.reasonType().name(), r.justification(), r.operationalCause(), r.actionPlan(),
-                r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), r.decidedByUserId(),
-                r.decidedAt(), "PENDING".equals(r.status()),
-                List.of(new ApprovalValueChangeView(r.kpiResultId(), null, null, r.originalValue(), r.proposedValue(), r.uomId())));
+                r.incidentReference(), r.proposedByUserId(), proposer, r.proposedAt(), r.expiresAt(), r.decidedByUserId(),
+                null, r.decidedAt(), "PENDING".equals(r.status()),
+                List.of(new ApprovalValueChangeView(r.kpiResultId(), r.metricCode(), r.metricCode(), null, null, null, null,
+                        null, null, null, null, r.originalValue(), r.proposedValue(), r.uomId(), null, null)));
     }
 
     private ApprovalValidationView approval(StopTimeValidationResult r) {
+        String proposer = r.auditEvidence() == null ? null : r.auditEvidence().displayNameSnapshot();
         return new ApprovalValidationView(r.validationId(), "OEE", "STOP_TIME", r.status(), r.plantId(), r.lineId(),
                 r.businessDate(), r.reasonType().name(), r.justification(), r.operationalCause(), r.actionPlan(),
-                r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), r.decidedByUserId(),
-                r.decidedAt(), "PENDING".equals(r.status()),
-                List.of(new ApprovalValueChangeView(null, r.stopClassificationId(), null,
-                        java.math.BigDecimal.valueOf(r.originalSeconds()), java.math.BigDecimal.valueOf(r.proposedSeconds()), null)));
+                r.incidentReference(), r.proposedByUserId(), proposer, r.proposedAt(), r.expiresAt(), r.decidedByUserId(),
+                null, r.decidedAt(), "PENDING".equals(r.status()),
+                List.of(new ApprovalValueChangeView(null, null, null, r.stopClassificationId(), r.classificationCode(),
+                        r.classificationName(), r.programmingType(), null, null, null, null,
+                        java.math.BigDecimal.valueOf(r.originalSeconds()), java.math.BigDecimal.valueOf(r.proposedSeconds()), null, "SECOND", "Seconds")));
     }
 
     private ApprovalValidationView approval(MassPerformanceValidationResult r) {
+        String proposer = r.auditEvidence() == null ? null : r.auditEvidence().displayNameSnapshot();
+        String metricCode = r.variable().name();
         return new ApprovalValidationView(r.validationId(), "OEE", "MASS_PERFORMANCE", r.status(), r.plantId(), r.lineId(),
                 r.businessDate(), r.reasonType().name(), r.justification(), r.operationalCause(), r.actionPlan(),
-                r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), r.approvedByUserId(),
-                r.approvedAt(), "PENDING".equals(r.status()),
-                List.of(new ApprovalValueChangeView(null, null, null, r.originalValue(), r.proposedValue(), r.uomId())));
+                r.incidentReference(), r.proposedByUserId(), proposer, r.proposedAt(), r.expiresAt(), r.approvedByUserId(),
+                null, r.approvedAt(), "PENDING".equals(r.status()),
+                List.of(new ApprovalValueChangeView(null, null, null, null, null, null, null, null, metricCode, metricCode, "OEE",
+                        r.originalValue(), r.proposedValue(), r.uomId(), null, null)));
     }
 
     private static ValidationAuditEvidenceView audit(long userId, java.time.Instant at) {
