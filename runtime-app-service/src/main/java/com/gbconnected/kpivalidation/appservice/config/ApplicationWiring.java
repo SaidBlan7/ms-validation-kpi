@@ -4,6 +4,7 @@ import com.gbconnected.kpivalidation.application.*;
 import com.gbconnected.kpivalidation.application.port.out.DatabaseHealthPort;
 import com.gbconnected.kpivalidation.application.manual.ManualKpiUseCase;
 import com.gbconnected.kpivalidation.application.manual.scope.*;
+import com.gbconnected.kpivalidation.application.approval.KpiApprovalUseCase;
 import com.gbconnected.kpivalidation.bootstrap.MicroserviceRuntime;
 import org.springframework.context.annotation.*;
 
@@ -39,4 +40,5 @@ public class ApplicationWiring {
     @Bean ManualKpiUseCase manualKpis(MicroserviceRuntime runtime) { return runtime.manualKpis(); }
     @Bean ManualKpiScopeUseCase manualKpiScope(MicroserviceRuntime runtime) { return runtime.manualKpiScope(); }
     @Bean AdministerManualKpiScopeUseCase manualKpiScopeAdministration(MicroserviceRuntime runtime) { return runtime.manualKpiScopeAdministration(); }
+    @Bean KpiApprovalUseCase kpiApproval(MicroserviceRuntime runtime) { return runtime.kpiApproval(); }
 }

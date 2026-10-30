@@ -1,9 +1,51 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.19.0
-  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data.
+  version: 0.20.0
+  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data. Aprobación KPI Spec 01 añade revisión y decisión final sobre validaciones OEE canónicas; desperdicios queda condicionado a una fuente canónica de validaciones de waste.
 paths:
+  /api/v1/kpi-approval/policy:
+    get:
+      summary: Returns Aprobación KPI Spec 01 workflow policy
+      responses:
+        '200': { description: Approval workflow policy and OEE/waste source readiness }
+  /api/v1/kpi-approval/pending:
+    get:
+      summary: Lists pending KPI validations visible to the authenticated approver
+      description: Expired PENDING rows are transitioned to EXPIRED before the response. Results are filtered server-side by plant access, approval capability and feature activation.
+      responses:
+        '200': { description: Pending validations in authorized plants }
+        '401': { description: Authentication required }
+        '403': { description: Approval scope denied }
+  /api/v1/kpi-approval/validations/{id}:
+    get:
+      summary: Gets one KPI validation for approval review
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: Validation with original/proposed values and evidence }
+        '403': { description: Approval scope denied }
+        '404': { description: Validation not found }
+  /api/v1/kpi-approval/validations/{id}/decision:
+    post:
+      summary: Applies the single final APPROVED or REJECTED decision
+      description: Atomic PENDING-state transition. APPROVED makes the proposed value effective to downstream KPI logic; REJECTED/EXPIRED preserve the original. A comment is not required by Spec 01 and reversal is not exposed in this flow.
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APPROVED, REJECTED] }
+      responses:
+        '200': { description: Final validation state }
+        '403': { description: Approval scope denied }
+        '404': { description: Validation not found }
+        '409': { description: Validation already decided or expired }
   /api/v1/manual-kpis/policy:
     get:
       summary: Returns KPI Manuales Spec 01 policy and readiness

@@ -2,13 +2,16 @@ package com.gbconnected.kpivalidation.adapter.memory;
 
 import com.gbconnected.kpivalidation.application.*;
 import com.gbconnected.kpivalidation.application.port.out.ValidationPersistencePort;
+import com.gbconnected.kpivalidation.application.approval.*;
+import com.gbconnected.kpivalidation.application.port.out.approval.KpiApprovalPersistencePort;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-public final class InMemoryValidationPersistenceAdapter implements ValidationPersistencePort {
+public final class InMemoryValidationPersistenceAdapter implements ValidationPersistencePort, KpiApprovalPersistencePort {
     private final AtomicLong sequence = new AtomicLong();
     private final ConcurrentHashMap<Long, OeeValidationResult> byId = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Long> byKpiResult = new ConcurrentHashMap<>();
@@ -91,6 +94,118 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     @Override
     public Optional<MassPerformanceValidationResult> findMassPerformanceById(long validationId) {
         return Optional.ofNullable(massById.get(validationId));
+    }
+
+    @Override
+    public List<ApprovalValidationView> pending() {
+        return java.util.stream.Stream.concat(
+                        java.util.stream.Stream.concat(byId.values().stream().map(this::approval),
+                                stopById.values().stream().map(this::approval)),
+                        massById.values().stream().map(this::approval))
+                .filter(v -> "PENDING".equals(v.status()))
+                .sorted(java.util.Comparator.comparing(ApprovalValidationView::proposedAt).reversed())
+                .toList();
+    }
+
+    @Override
+    public Optional<ApprovalValidationView> find(long validationId) {
+        if (byId.containsKey(validationId)) return Optional.of(approval(byId.get(validationId)));
+        if (stopById.containsKey(validationId)) return Optional.of(approval(stopById.get(validationId)));
+        if (massById.containsKey(validationId)) return Optional.of(approval(massById.get(validationId)));
+        return Optional.empty();
+    }
+
+    @Override
+    public synchronized ApprovalValidationView decide(long validationId, long userId, ApprovalDecision decision, Instant at, String correlationId) {
+        if (byId.containsKey(validationId)) {
+            OeeValidationResult r = byId.get(validationId);
+            ensurePending(r.status(), r.expiresAt(), at);
+            r = new OeeValidationResult(r.validationId(), decision.name(), r.plantId(), r.lineId(), r.businessDate(),
+                    r.metricCode(), r.kpiResultId(), r.originalValue(), r.proposedValue(), r.uomId(), r.reasonType(),
+                    r.justification(), r.operationalCause(), r.actionPlan(), r.incidentReference(), r.proposedByUserId(),
+                    r.proposedAt(), r.expiresAt(), userId, at, r.auditEvidence(), r.issues());
+            byId.put(validationId, r);
+            return approval(r);
+        }
+        if (stopById.containsKey(validationId)) {
+            StopTimeValidationResult r = stopById.get(validationId);
+            ensurePending(r.status(), r.expiresAt(), at);
+            r = new StopTimeValidationResult(r.validationId(), decision.name(), r.plantId(), r.lineId(), r.businessDate(),
+                    r.stopClassificationId(), r.classificationCode(), r.classificationName(), r.programmingType(),
+                    r.originalSeconds(), r.proposedSeconds(), r.reasonType(), r.justification(), r.operationalCause(),
+                    r.actionPlan(), r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), userId, at,
+                    r.auditEvidence(), r.issues());
+            stopById.put(validationId, r);
+            return approval(r);
+        }
+        if (massById.containsKey(validationId)) {
+            MassPerformanceValidationResult r = massById.get(validationId);
+            ensurePending(r.status(), r.expiresAt(), at);
+            r = new MassPerformanceValidationResult(r.validationId(), decision.name(), r.plantId(), r.lineId(),
+                    r.businessDate(), r.uomId(), r.variable(), r.originalValue(), r.proposedValue(), r.sourceAggregateKey(),
+                    r.sourceType(), r.reasonType(), r.justification(), r.operationalCause(), r.actionPlan(),
+                    r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), userId, at,
+                    r.auditEvidence(), r.issues());
+            massById.put(validationId, r);
+            return approval(r);
+        }
+        throw new ApprovalNotFoundException("KPI validation not found");
+    }
+
+    @Override
+    public synchronized void expirePending(Instant now, String correlationId) {
+        byId.replaceAll((k, r) -> "PENDING".equals(r.status()) && r.expiresAt().isBefore(now)
+                ? new OeeValidationResult(r.validationId(), "EXPIRED", r.plantId(), r.lineId(), r.businessDate(),
+                        r.metricCode(), r.kpiResultId(), r.originalValue(), r.proposedValue(), r.uomId(), r.reasonType(),
+                        r.justification(), r.operationalCause(), r.actionPlan(), r.incidentReference(), r.proposedByUserId(),
+                        r.proposedAt(), r.expiresAt(), null, null, r.auditEvidence(), r.issues())
+                : r);
+        stopById.replaceAll((k, r) -> "PENDING".equals(r.status()) && r.expiresAt().isBefore(now)
+                ? new StopTimeValidationResult(r.validationId(), "EXPIRED", r.plantId(), r.lineId(), r.businessDate(),
+                        r.stopClassificationId(), r.classificationCode(), r.classificationName(), r.programmingType(),
+                        r.originalSeconds(), r.proposedSeconds(), r.reasonType(), r.justification(), r.operationalCause(),
+                        r.actionPlan(), r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), null, null,
+                        r.auditEvidence(), r.issues())
+                : r);
+        massById.replaceAll((k, r) -> "PENDING".equals(r.status()) && r.expiresAt().isBefore(now)
+                ? new MassPerformanceValidationResult(r.validationId(), "EXPIRED", r.plantId(), r.lineId(), r.businessDate(),
+                        r.uomId(), r.variable(), r.originalValue(), r.proposedValue(), r.sourceAggregateKey(), r.sourceType(),
+                        r.reasonType(), r.justification(), r.operationalCause(), r.actionPlan(), r.incidentReference(),
+                        r.proposedByUserId(), r.proposedAt(), r.expiresAt(), null, null, r.auditEvidence(), r.issues())
+                : r);
+    }
+
+    @Override public boolean supportsWasteValidations() { return false; }
+
+    private static void ensurePending(String status, Instant expiresAt, Instant decisionAt) {
+        if (!"PENDING".equals(status) || decisionAt.isAfter(expiresAt)) {
+            throw new ApprovalConflictException("Validation was already decided or expired");
+        }
+    }
+
+    private ApprovalValidationView approval(OeeValidationResult r) {
+        return new ApprovalValidationView(r.validationId(), "OEE", "KPI_RESULT", r.status(), r.plantId(), r.lineId(),
+                r.businessDate(), r.reasonType().name(), r.justification(), r.operationalCause(), r.actionPlan(),
+                r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), r.decidedByUserId(),
+                r.decidedAt(), "PENDING".equals(r.status()),
+                List.of(new ApprovalValueChangeView(r.kpiResultId(), null, null, r.originalValue(), r.proposedValue(), r.uomId())));
+    }
+
+    private ApprovalValidationView approval(StopTimeValidationResult r) {
+        return new ApprovalValidationView(r.validationId(), "OEE", "STOP_TIME", r.status(), r.plantId(), r.lineId(),
+                r.businessDate(), r.reasonType().name(), r.justification(), r.operationalCause(), r.actionPlan(),
+                r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), r.decidedByUserId(),
+                r.decidedAt(), "PENDING".equals(r.status()),
+                List.of(new ApprovalValueChangeView(null, r.stopClassificationId(), null,
+                        java.math.BigDecimal.valueOf(r.originalSeconds()), java.math.BigDecimal.valueOf(r.proposedSeconds()), null)));
+    }
+
+    private ApprovalValidationView approval(MassPerformanceValidationResult r) {
+        return new ApprovalValidationView(r.validationId(), "OEE", "MASS_PERFORMANCE", r.status(), r.plantId(), r.lineId(),
+                r.businessDate(), r.reasonType().name(), r.justification(), r.operationalCause(), r.actionPlan(),
+                r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), r.approvedByUserId(),
+                r.approvedAt(), "PENDING".equals(r.status()),
+                List.of(new ApprovalValueChangeView(null, null, null, r.originalValue(), r.proposedValue(), r.uomId())));
     }
 
     private static ValidationAuditEvidenceView audit(long userId, java.time.Instant at) {
