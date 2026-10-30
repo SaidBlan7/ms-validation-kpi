@@ -93,7 +93,7 @@ public final class ManualKpiService implements ManualKpiUseCase {
         Objects.requireNonNull(command, "command is required");
         PlantContext plant = authorizeScope(actor, command.plantId(), command.lineId(), true);
         if (!persistence.available()) throw new ManualKpiStorageUnavailableException(
-                "Canonical database has no Manual KPI business entity. Data must provide canonical persistence before PostgreSQL writes can be enabled.");
+                "Manual KPI persistence is unavailable for the configured runtime.");
         ZoneId zone = zone(plant.timezoneName());
         Instant now = clock.instant();
         long userId = canonicalUser(actor);
@@ -159,7 +159,12 @@ public final class ManualKpiService implements ManualKpiUseCase {
         for (ManualStopTimeInput x:oee.stopTimes()) {
             if (x==null || x.stopClassificationId()<=0) throw new DomainValidationException("Stop time values must reference a valid stop classification");
             if (!stopIds.add(x.stopClassificationId())) throw new DomainValidationException("Duplicate stop classification in OEE section");
-            if (!allowedStops.containsKey(x.stopClassificationId())) throw new DomainValidationException("Unknown, inactive or out-of-scope stop classification: "+x.stopClassificationId());
+            ManualStopClassificationView classification = allowedStops.get(x.stopClassificationId());
+            if (classification == null) throw new DomainValidationException("Unknown, inactive or out-of-scope stop classification: "+x.stopClassificationId());
+            String oeeType = classification.oeeStopTypeCode();
+            if (!("PROGRAMMED".equals(oeeType) || "UNPROGRAMMED".equals(oeeType))) {
+                throw new DomainValidationException("Stop classification is not valid for Manual KPI OEE capture: "+x.stopClassificationId());
+            }
             stopHours.add(x.hours());
         }
         stopTimePolicy.validate(stopHours);

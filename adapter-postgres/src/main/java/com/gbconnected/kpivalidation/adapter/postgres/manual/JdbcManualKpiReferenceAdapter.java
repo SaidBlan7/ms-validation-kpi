@@ -33,6 +33,7 @@ public final class JdbcManualKpiReferenceAdapter implements ManualKpiReferencePo
                       FROM stops.stop_classification sc
                       LEFT JOIN plant_org po ON TRUE
                      WHERE sc.is_active = TRUE
+                       AND sc.oee_stop_type_code IN ('PROGRAMMED', 'UNPROGRAMMED')
                        AND (sc.organization_id IS NULL OR sc.organization_id = po.organization_id)
                      ORDER BY sc.classification_code,
                               (sc.organization_id IS NOT NULL) DESC,

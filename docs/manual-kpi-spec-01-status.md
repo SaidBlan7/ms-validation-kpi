@@ -47,29 +47,27 @@ No requiere cambiar el modelo para feature/security, pero sí requiere datos de 
 
 Los códigos pueden sobrescribirse con `GBC_MANUAL_KPI_FEATURE_CODE` y `GBC_MANUAL_KPI_CAPABILITY_CODE`.
 
-## Bloqueo real de base canónica — requiere Data
+## Persistencia canónica confirmada por Data
 
-La base canónica entregada **no contiene una entidad de negocio para almacenar KPI Manuales**. No existe una tabla que pueda conservar correctamente, sin cambiar semántica de otros dominios:
+Data confirmó que KPI Manuales debe persistirse utilizando `kpi.kpi_result`. El micro deja de operar fail-closed en PostgreSQL/Lakebase y usa un `JdbcManualKpiPersistenceAdapter` real.
 
-- cabecera diaria manual por planta/línea/fecha;
-- sección OEE de tiempos por clasificación;
-- sección OEE de masas elaboradas y entregadas como entradas diferenciadas de rendimiento;
-- sección de desperdicio por subclasificación canónica;
-- toneladas producidas;
-- primera creación, versión/revisiones y ventana de edición de 8 horas;
-- trazabilidad del valor manual aun cuando posteriormente llegue el automático.
+Criterio implementado:
 
-Por este motivo el adapter PostgreSQL/Lakebase **no escribe** KPI Manuales y devuelve `503 Service Unavailable` en guardado. Esto es intencional: no se reutilizan `kpi.kpi_result`, `configuration.configuration_assignment`, `integration.message`, `audit.change_log`, `waste.waste_event` ni otras tablas como almacenamiento genérico porque alteraría su semántica canónica.
+- `source_mode = MANUAL`.
+- Una fila append-only de `kpi.kpi_result` por versión del registro manual.
+- `source_snapshot` conserva la captura compuesta (OEE, masas, desperdicio, toneladas), timezone snapshot, versión, actor, timestamps, correlación y eventos CREATE/UPDATE.
+- El primer `kpi_result_id` se conserva como `recordId` estable del registro manual.
+- Las actualizaciones no sobrescriben versiones anteriores.
+- Concurrencia por `plantId + lineId + businessDate` se serializa en PostgreSQL y sigue exigiendo `expectedVersion`.
+- `period_start` parte del inicio local de `businessDate`; `period_end` se fija a +24 horas conforme a la regla funcional cerrada.
 
-### Única solicitud necesaria a Data para cerrar persistencia al 100%
+### Configuración requerida
 
-Data debe incorporar al modelo canónico una entidad/estructura oficial de persistencia para KPI Manuales que cubra los puntos anteriores y entregue su contrato final (tablas/columnas/FK/índices/auditoría). El micro ya queda aislado mediante `ManualKpiPersistencePort`; al recibir ese contrato solo se sustituye el adapter PostgreSQL sin cambiar API ni reglas de aplicación.
+`GBC_MANUAL_KPI_CAPTURE_KPI_CODE` debe apuntar al `kpi.kpi_definition.kpi_code` activo que Data haya definido para representar la captura manual compuesta en `kpi_result`. El micro no inventa ese código ni crea datos maestros.
 
 ## Dependencia externa para propagación a reportes
 
-La spec exige consumo en OEE 1, OEE 2, OEE completo, indicadores y reportes de desperdicio. Esos consumidores no están dentro de este microservicio. El criterio ya queda cerrado como `AUTOMATIC_WINS_MANUAL_RETAINED_FOR_TRACEABILITY`, pero el pipeline/reporting debe leer la entidad canónica de KPI Manuales que Data incorpore y aplicar esa precedencia.
-
-Hasta que exista dicha entidad y los consumidores la integren, la propagación productiva a reportes no puede quedar implementada desde este repositorio.
+La spec exige consumo en OEE 1, OEE 2, OEE completo, indicadores y reportes de desperdicio. Esos consumidores no están dentro de este microservicio. El criterio ya queda cerrado como `AUTOMATIC_WINS_MANUAL_RETAINED_FOR_TRACEABILITY`, pero el pipeline/reporting debe consumir los registros `kpi.kpi_result` con `source_mode = MANUAL` conforme al contrato aprobado por Data y aplicar esa precedencia. La integración de esos consumidores sigue fuera de este repositorio.
 
 ## Ajuste incorporado por Spec 08
 - La ventana de edición se centraliza en dominio y queda formalmente definida como `[createdAt, createdAt + 8h)`: el instante exacto `+8h` ya no es editable.

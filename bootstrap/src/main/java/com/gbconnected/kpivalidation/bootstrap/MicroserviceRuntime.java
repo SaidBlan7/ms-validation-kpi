@@ -104,7 +104,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 manualAuthorization = new JdbcManualKpiAuthorizationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"));
                 manualReferences = new JdbcManualKpiReferenceAdapter(ds);
-                manualPersistence = ManualKpiPersistencePort.unavailable("CANONICAL_STORAGE_PENDING_DATA_MODEL");
+                manualPersistence = new JdbcManualKpiPersistenceAdapter(ds, requiredEnv(env, "GBC_MANUAL_KPI_CAPTURE_KPI_CODE"));
                 manualFeatureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
                 manualScope = new JdbcManualKpiScopeAdapter(ds);
                 manualScopeAdministration = new JdbcManualKpiScopeAdministrationAdapter(ds,
@@ -128,7 +128,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
                 manualAuthorization = new JdbcManualKpiAuthorizationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"));
                 manualReferences = new JdbcManualKpiReferenceAdapter(ds);
-                manualPersistence = ManualKpiPersistencePort.unavailable("CANONICAL_STORAGE_PENDING_DATA_MODEL");
+                manualPersistence = new JdbcManualKpiPersistenceAdapter(ds, requiredEnv(env, "GBC_MANUAL_KPI_CAPTURE_KPI_CODE"));
                 manualFeatureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
                 manualScope = new JdbcManualKpiScopeAdapter(ds);
                 manualScopeAdministration = new JdbcManualKpiScopeAdministrationAdapter(ds,
@@ -217,6 +217,12 @@ public final class MicroserviceRuntime implements AutoCloseable {
     public ManualKpiUseCase manualKpis() { return manualKpis; }
     public ManualKpiScopeUseCase manualKpiScope() { return manualKpiScope; }
     public AdministerManualKpiScopeUseCase manualKpiScopeAdministration() { return manualKpiScopeAdministration; }
+
+    private static String requiredEnv(Map<String, String> env, String key) {
+        String value = env.get(key);
+        if (value == null || value.isBlank()) throw new IllegalArgumentException(key + " is required");
+        return value.trim();
+    }
 
     private static int optionalNonNegativeInt(Map<String, String> env, String key) {
         String raw = env.get(key);

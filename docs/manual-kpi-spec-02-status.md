@@ -45,5 +45,5 @@ No se requiere cambio de DDL para esta spec. Para habilitar administración en P
 Si negocio exige una aprobación/visto bueno formal antes de otorgar acceso, esa decisión sí debe definirse antes de implementarla: la base canónica actual no modela una aprobación específica para `user_plant_access` y esta spec no define quién aprueba ni sus estados.
 
 ## Relación con Spec 01
-La captura de KPI Manuales continúa bloqueada en PostgreSQL únicamente por la persistencia canónica faltante de la propia captura diaria (pendiente de Spec 01). La selección/autorización de planta y línea de esta Spec 02 sí queda resuelta contra PostgreSQL canónico.
+La captura de KPI Manuales ya cuenta con persistencia PostgreSQL canónica mediante `kpi.kpi_result`, conforme a la decisión de Data documentada en la Spec 01. La selección/autorización de planta y línea de esta Spec 02 continúa resuelta contra PostgreSQL canónico.
 

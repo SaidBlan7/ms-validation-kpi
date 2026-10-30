@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
   version: 0.19.0
-  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI and PostgreSQL capture persistence remains fail-closed until the canonical Manual KPI business entity exists.
+  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data.
 paths:
   /api/v1/manual-kpis/policy:
     get:
@@ -59,7 +59,7 @@ paths:
         '401': { description: Authentication required }
         '403': { description: Plant/line/capability scope denied }
         '404': { description: Manual KPI record not found }
-        '503': { description: Canonical Manual KPI persistence is not yet available in PostgreSQL/Lakebase }
+        '503': { description: Manual KPI persistence is unavailable or the configured canonical kpi_definition is not available }
 
   /api/v1/manual-kpis:
     get:
@@ -75,7 +75,7 @@ paths:
         '404': { description: Manual KPI record not found }
     put:
       summary: Creates or updates the daily Manual KPI capture inside the 8-hour edit window
-      description: For a new daily record, validates the exact inclusive 96-hour plant-local date-selection window plus canonical scope/catalogs, feature activation and non-negative values. For an existing record, the independent 8-hour window from first save remains authoritative even if the business date has since crossed outside the 96-hour selection window. Automatic data has precedence downstream while the manual record remains traceable. PostgreSQL/Lakebase returns 503 until Data provides the canonical Manual KPI persistence entity; memory mode is fully operational.
+      description: For a new daily record, validates the exact inclusive 96-hour plant-local date-selection window plus canonical scope/catalogs, feature activation and non-negative values. For an existing record, the independent 8-hour window from first save remains authoritative even if the business date has since crossed outside the 96-hour selection window. Automatic data has precedence downstream while the manual record remains traceable. PostgreSQL/Lakebase persists versioned Manual KPI captures in kpi.kpi_result with source_mode=MANUAL; source_snapshot retains the composite manual evidence and audit trace.
       requestBody:
         required: true
         content:
@@ -126,7 +126,7 @@ paths:
         '403': { description: Plant/line/capability scope denied }
         '409': { description: Optimistic concurrency conflict or invalid expectedVersion usage }
         '422': { description: Business rule violation, including stop-time total > 24 hours, invalid manual mass/production values or expired edit window }
-        '503': { description: Canonical Manual KPI persistence is not yet available in PostgreSQL/Lakebase }
+        '503': { description: Manual KPI persistence is unavailable or the configured canonical kpi_definition is not available }
   /api/v1/manual-kpis/scope/me:
     get:
       summary: Returns the effective KPI Manuales plants and enabled lines for the authenticated superuser

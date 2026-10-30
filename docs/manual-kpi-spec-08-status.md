@@ -1,7 +1,7 @@
 # KPI Manuales — Spec 08: Fecha, hora y usuario de registro
 
 ## Estado
-Implementada para el flujo manual en `memory` y preparada en application/API para la futura persistencia canónica. No requiere un esquema nuevo adicional al pendiente general de KPI Manuales identificado desde la Spec 01.
+Implementada para el flujo manual tanto en `memory` como sobre la persistencia PostgreSQL canónica de KPI Manuales en `kpi.kpi_result`. La trazabilidad de creación/actualización se conserva dentro del `source_snapshot` versionado, sin requerir un esquema adicional para esta Spec 08.
 
 ## Reglas cerradas
 - Se conserva siempre el `user_id` canónico que creó el registro.
