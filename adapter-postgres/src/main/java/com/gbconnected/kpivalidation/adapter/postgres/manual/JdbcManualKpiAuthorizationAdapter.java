@@ -21,7 +21,7 @@ public final class JdbcManualKpiAuthorizationAdapter implements ManualKpiAuthori
                 AND c.capability_code=?
                 AND ura.valid_from<=CURRENT_TIMESTAMP AND (ura.valid_to IS NULL OR ura.valid_to>CURRENT_TIMESTAMP)
                 AND rc.valid_from<=CURRENT_TIMESTAMP AND (rc.valid_to IS NULL OR rc.valid_to>CURRENT_TIMESTAMP)
-                AND (ura.plant_id IS NULL OR ura.plant_id=?)
+                AND ura.plant_id=?
             )
             """;
         try(Connection c=ds.getConnection();PreparedStatement p=c.prepareStatement(q)){p.setObject(1,tenant);p.setObject(2,object);p.setString(3,capability);p.setLong(4,plant);try(ResultSet r=p.executeQuery()){r.next();return r.getBoolean(1);}}catch(SQLException e){throw new IllegalStateException("Unable to authorize Manual KPI actor",e);}

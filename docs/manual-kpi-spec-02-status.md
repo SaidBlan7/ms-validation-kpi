@@ -1,11 +1,11 @@
 # KPI Manuales — Spec 02: Asignación de planta a superusuario
 
 ## Estado
-Implementada sobre el modelo canónico existente, sin cambios de esquema.
+CERRADA del lado del micro sobre el modelo canónico existente, sin cambios de esquema.
 
 ## Decisiones cerradas
 - Un superusuario puede tener múltiples plantas. No se impone máximo porque `app_security.user_plant_access` no define uno y la especificación no aporta una cifra contractual.
-- La autorización se revalida en servidor en cada lectura/escritura. Si se retira una asignación durante una sesión activa, deja de ser efectiva en la siguiente petición sin esperar logout/token refresh.
+- La autorización se revalida en servidor en cada lectura/escritura. La capability de entrada requiere una `user_role_assignment` vigente y explícitamente asociada a la planta (`plant_id` no global). Si se retira una asignación durante una sesión activa, deja de ser efectiva en la siguiente petición sin esperar logout/token refresh.
 - Las líneas visibles son la intersección de: acceso vigente a planta, acceso vigente a línea, asignación vigente línea→planta, línea/planta activas y `KPI_MANUAL_ENTRY_ENABLED` efectivo para la línea.
 - La zona horaria se toma de `core.plant.timezone_name`; no se copia ni se configura por usuario.
 - Retirar acceso cierra `valid_to`; nunca borra el histórico. Reasignar crea una nueva fila histórica.
@@ -34,7 +34,7 @@ Implementada sobre el modelo canónico existente, sin cambios de esquema.
 - `GBC_MANUAL_KPI_ROLE_CODE` (default `KPI_MANUAL_SUPERUSER`).
 - `GBC_MANUAL_KPI_SCOPE_ADMIN_CAPABILITY_CODE` (default `KPI_MANUAL_SCOPE_ADMIN`).
 
-## Pendiente externo real
+## Datos maestros requeridos para operación
 No se requiere cambio de DDL para esta spec. Para habilitar administración en PostgreSQL, Data/Seguridad debe confirmar/cargar en datos maestros:
 1. Rol de módulo `KPI_MANUAL_SUPERUSER` (o el código acordado) asociado a la capability `KPI_MANUAL_ENTRY`.
 2. `app_security.capability.capability_code = KPI_MANUAL_SCOPE_ADMIN` (o el código acordado).
@@ -42,7 +42,7 @@ No se requiere cambio de DDL para esta spec. Para habilitar administración en P
 4. La asignación vigente de dicho rol administrativo a los actores administradores mediante `user_role_assignment`.
 5. El superusuario objetivo debe contar previamente con `user_plant_access` general a la planta; este micro no lo concede para evitar ampliar permisos de otros módulos.
 
-Si negocio exige una aprobación/visto bueno formal antes de otorgar acceso, esa decisión sí debe definirse antes de implementarla: la base canónica actual no modela una aprobación específica para `user_plant_access` y esta spec no define quién aprueba ni sus estados.
+La pregunta abierta de visto bueno no bloquea esta spec: mientras negocio no defina un flujo formal adicional, el control vigente es la capability administrativa y la trazabilidad canónica. Si posteriormente se define aprobación formal, sería una funcionalidad adicional y no cambia el contrato actual de alcance de KPI Manuales.
 
 ## Relación con Spec 01
 La captura de KPI Manuales ya cuenta con persistencia PostgreSQL canónica mediante `kpi.kpi_result`, conforme a la decisión de Data documentada en la Spec 01. La selección/autorización de planta y línea de esta Spec 02 continúa resuelta contra PostgreSQL canónico.
