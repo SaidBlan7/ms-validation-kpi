@@ -59,7 +59,7 @@ No se necesita pedir DDL ni catálogo de festivos a Data para esta spec:
 ## Pendientes reales
 Ninguno para la regla de selección de fecha.
 
-Sigue vigente el bloqueo externo de Spec 01: falta la entidad canónica de persistencia de KPI Manuales para guardar capturas en PostgreSQL/Lakebase y posteriormente integrarlas a reporting.
+La persistencia PostgreSQL de KPI Manuales ya está resuelta mediante `kpi.kpi_result` con `source_mode = MANUAL` y `source_snapshot`, conforme a la definición confirmada por Data. Esta Spec 03 no requiere cambios adicionales de esquema ni de contrato.
 
 
 ## Ajuste incorporado por Spec 04

@@ -32,6 +32,21 @@ class ManualKpiDatePolicyTest {
         assertFalse(result.calendarDayFilteringApplied());
     }
 
+    @Test void futureDateIsEvaluatedUsingPlantLocalDate() {
+        ZoneId zone = ZoneId.of("America/Mexico_City");
+        Instant now = Instant.parse("2026-08-05T05:30:00Z"); // Aug 4 23:30 in plant
+        var result = policy.evaluate(LocalDate.of(2026, 8, 5), zone, now);
+        assertFalse(result.selectable());
+        assertEquals("FUTURE_DATE", result.rejectionCode());
+    }
+
+    @Test void sameUtcInstantCanBeValidForPlantLocalPreviousDate() {
+        ZoneId zone = ZoneId.of("America/Mexico_City");
+        Instant now = Instant.parse("2026-08-05T06:30:00Z"); // Aug 5 00:30 in plant
+        var result = policy.evaluate(LocalDate.of(2026, 8, 5), zone, now);
+        assertTrue(result.selectable());
+    }
+
     @Test void oeePeriodRemainsFixedTwentyFourHoursAcrossDstSpringForward() {
         ZoneId zone = ZoneId.of("America/New_York");
         Instant now = Instant.parse("2026-03-09T12:00:00Z");
