@@ -32,7 +32,7 @@ Spec 01 writes validation proposals to canonical `kpi.kpi_validation` and `kpi.k
 
 `OeeMetricSourcePort` is backed by canonical `kpi.kpi_result`. `ValidationPersistencePort` is implemented by `JdbcValidationPersistenceAdapter` over `kpi.kpi_validation` and `kpi.kpi_validation_detail`.
 
-Canonical v1.2 authorization uses `app_security.user_role_assignment` as the plant-scoped validator assignment and verifies the role-capability relationship. Semantic defaults are `KPI_OEE_VALIDATOR` / `KPI_OEE_VALIDATION`; they are configuration, not hard-coded business truth. Generic `user_plant_access` remains an independent minimum-privilege requirement. `GBC_KPI_VALIDATOR_ASSIGNMENTS` exists only as a memory/local fixture.
+Canonical authorization follows the current security schema: `app_security.user_role_assignment` supplies the single current application role and `role_capability` supplies WHAT the user can do; `app_security.user_plant_access` supplies WHERE that role is effective. The PostgreSQL default validator role is `VALIDADOR` with capability `KPI_OEE_VALIDATION`. Multi-plant scope is therefore represented by multiple current plant-access rows, not multiple current role assignments. `GBC_KPI_VALIDATOR_ASSIGNMENTS` remains only a memory/local fixture.
 
 The service checks the Spec 01 maximum of two active validators on each plant-scoped operation. This detects and blocks invalid canonical reference data but cannot prevent an administrator or another service from inserting a third assignment because this micro is read-only and the canonical DDL has no corresponding exclusion/unique rule.
 

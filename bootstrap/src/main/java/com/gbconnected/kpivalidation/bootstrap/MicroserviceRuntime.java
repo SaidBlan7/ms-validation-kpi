@@ -133,7 +133,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 approvalFeatureActivation = new JdbcFeatureActivationAdapter(ds,
                         env.getOrDefault("GBC_KPI_APPROVAL_FEATURE_CODE", "KPI_APPROVAL_ENABLED"));
                 approvalScopeAdministration = new JdbcKpiApprovalScopeAdministrationAdapter(ds,
-                        env.getOrDefault("GBC_KPI_APPROVER_ROLE_CODE", "KPI_APPROVER"),
+                        env.getOrDefault("GBC_KPI_APPROVER_ROLE_CODE", "SUPERVISOR"),
                         env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"),
                         env.getOrDefault("GBC_KPI_APPROVAL_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_APPROVAL_SCOPE_ADMIN"));
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
@@ -143,7 +143,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 manualFeatureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
                 manualScope = new JdbcManualKpiScopeAdapter(ds);
                 manualScopeAdministration = new JdbcManualKpiScopeAdministrationAdapter(ds,
-                        env.getOrDefault("GBC_MANUAL_KPI_ROLE_CODE", "KPI_MANUAL_SUPERUSER"),
+                        env.getOrDefault("GBC_MANUAL_KPI_ROLE_CODE", "SUPERUSUARIO"),
                         env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"),
                         env.getOrDefault("GBC_MANUAL_KPI_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_MANUAL_SCOPE_ADMIN"));
                 close = ds;
@@ -166,7 +166,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 approvalFeatureActivation = new JdbcFeatureActivationAdapter(ds,
                         env.getOrDefault("GBC_KPI_APPROVAL_FEATURE_CODE", "KPI_APPROVAL_ENABLED"));
                 approvalScopeAdministration = new JdbcKpiApprovalScopeAdministrationAdapter(ds,
-                        env.getOrDefault("GBC_KPI_APPROVER_ROLE_CODE", "KPI_APPROVER"),
+                        env.getOrDefault("GBC_KPI_APPROVER_ROLE_CODE", "SUPERVISOR"),
                         env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"),
                         env.getOrDefault("GBC_KPI_APPROVAL_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_APPROVAL_SCOPE_ADMIN"));
                 featureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_KPI_VALIDATION_FEATURE_CODE", "KPI_OEE_VALIDATION_ENABLED"));
@@ -176,7 +176,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 manualFeatureActivation = new JdbcFeatureActivationAdapter(ds, env.getOrDefault("GBC_MANUAL_KPI_FEATURE_CODE", "KPI_MANUAL_ENTRY_ENABLED"));
                 manualScope = new JdbcManualKpiScopeAdapter(ds);
                 manualScopeAdministration = new JdbcManualKpiScopeAdministrationAdapter(ds,
-                        env.getOrDefault("GBC_MANUAL_KPI_ROLE_CODE", "KPI_MANUAL_SUPERUSER"),
+                        env.getOrDefault("GBC_MANUAL_KPI_ROLE_CODE", "SUPERUSUARIO"),
                         env.getOrDefault("GBC_MANUAL_KPI_CAPABILITY_CODE", "KPI_MANUAL_ENTRY"),
                         env.getOrDefault("GBC_MANUAL_KPI_SCOPE_ADMIN_CAPABILITY_CODE", "KPI_MANUAL_SCOPE_ADMIN"));
                 close = ds;
@@ -197,7 +197,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
             String plant = env.getOrDefault("DEV_PLANT_ID", "1");
             configuredAssignments = plant + "=" + tenant + "/" + user;
         }
-        String validatorRoleCode = env.getOrDefault("GBC_KPI_VALIDATOR_ROLE_CODE", "KPI_OEE_VALIDATOR");
+        String validatorRoleCode = env.getOrDefault("GBC_KPI_VALIDATOR_ROLE_CODE", "VALIDADOR");
         String validatorCapabilityCode = env.getOrDefault("GBC_KPI_VALIDATOR_CAPABILITY_CODE", "KPI_OEE_VALIDATION");
         ValidatorAssignmentPort assignments;
         String assignmentAdminCapabilityCode = env.getOrDefault("GBC_KPI_VALIDATOR_ADMIN_CAPABILITY_CODE", "KPI_OEE_VALIDATOR_ASSIGNMENT_ADMIN");

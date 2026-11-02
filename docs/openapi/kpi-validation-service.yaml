@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
   version: 0.22.0
-  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data. Aprobación KPI Specs 01-03 añade revisión/decisión OEE y desperdicios, asignación de jefaturas por planta y visualización histórica/filtrable de validaciones con detalle legible para Front. La autorización de aprobación exige asignación vigente específica de planta; revocaciones aplican en la siguiente petición.
+  description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data. Aprobación KPI Specs 01-03 añade revisión/decisión OEE y desperdicios, asignación de jefaturas por planta y visualización histórica/filtrable de validaciones con detalle legible para Front. La autorización de aprobación exige rol/capability vigente más user_plant_access vigente para la planta; revocaciones aplican en la siguiente petición.
 paths:
   /api/v1/kpi-approval/scope/policy:
     get:
@@ -19,7 +19,7 @@ paths:
         '403': { description: Scope administration denied }
     post:
       summary: Assigns KPI Approval capability to a jefatura for one plant
-      description: Requires the target user to be active and already have generic user_plant_access for the plant. Creates a plant-scoped app_security.user_role_assignment and preserves canonical audit history.
+      description: Requires the target user to have the configured current canonical role/capability. Creates temporal app_security.user_plant_access for the plant and preserves canonical audit history.
       requestBody:
         required: true
         content:
@@ -249,7 +249,7 @@ paths:
         '200': { description: Manual KPI scope policy }
   /api/v1/manual-kpis/scope/admin/assignments:
     get:
-      summary: Lists KPI Manuales role assignment history for a plant
+      summary: Lists KPI Manuales plant-access assignment history for a plant
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
       responses:
@@ -257,7 +257,7 @@ paths:
         '403': { description: Scope administration capability required }
     post:
       summary: Assigns KPI Manuales scope for one superuser and plant
-      description: Creates a plant-scoped user_role_assignment for the configured KPI Manuales role. The target must already have current generic user_plant_access for the plant.
+      description: Creates user_plant_access for the plant after verifying the target current canonical role and KPI Manuales capability.
       requestBody:
         required: true
         content:
@@ -272,10 +272,10 @@ paths:
       responses:
         '200': { description: Assignment created }
         '403': { description: Scope administration capability required }
-        '409': { description: Duplicate assignment or missing generic plant access }
+        '409': { description: Duplicate current plant access or target role/capability mismatch }
     delete:
       summary: Revokes KPI Manuales scope for one superuser and plant
-      description: Closes valid_to on the effective plant-scoped KPI Manuales role assignment; historical records keep the original actor identity.
+      description: Closes valid_to on the effective user_plant_access row; historical records keep the original actor identity.
       requestBody:
         required: true
         content:
@@ -328,7 +328,7 @@ paths:
   /api/v1/oee-validation/assignments/me:
     get:
       summary: Returns the effective KPI plant assignments for the authenticated validator
-      description: In PostgreSQL/Lakebase, resolves current plant-scoped user_role_assignment for the configured role/capability and only returns plants that also have current generic plant access. Each returned plant includes effectiveValidatorCount, remainingSlots and overLimit. The effective count requires both current KPI role/capability assignment and current user_plant_access. In memory mode, uses the explicit local fixture.
+      description: In PostgreSQL/Lakebase, resolves the single current validator role/capability and returns its current user_plant_access plants. Each returned plant includes effectiveValidatorCount, remainingSlots and overLimit. In memory mode, uses the explicit local fixture.
       responses:
         '200': { description: Effective KPI assignments }
         '401': { description: Authentication required }
@@ -345,7 +345,7 @@ paths:
         '403': { description: Assignment administrator capability required }
     post:
       summary: Assigns a plant to an approved KPI OEE superuser
-      description: Requires an externalApprovalReference because Direction Global approval remains outside GBC. The target user must be active and have current generic plant access. The transaction serializes by plant and rejects a third effective validator.
+      description: Requires an externalApprovalReference because Direction Global approval remains outside GBC. The target user must be active and already have the configured current validator role/capability. The transaction grants user_plant_access, serializes by plant and rejects a third effective validator.
       requestBody:
         required: true
         content:
@@ -363,7 +363,7 @@ paths:
         '400': { description: Invalid request/reference data }
         '401': { description: Authentication required }
         '403': { description: Assignment administrator capability required }
-        '409': { description: Duplicate assignment, missing generic plant access, or plant already has two validators }
+        '409': { description: Duplicate current plant access, target role/capability mismatch, or plant already has two validators }
   /api/v1/oee-validation/assignments/{targetUserId}/plants/{plantId}:
     patch:
       summary: Modifies approval evidence/reason for an effective KPI OEE plant assignment
@@ -387,7 +387,7 @@ paths:
   /api/v1/oee-validation/assignments/{targetUserId}/plants/{plantId}/revoke:
     post:
       summary: Revokes an effective KPI OEE plant assignment
-      description: Closes user_role_assignment.valid_to at the current instant. Existing PENDING KPI validations remain persisted and immutable; revocation only removes future validator access.
+      description: Closes user_plant_access.valid_to at the current instant. Existing PENDING KPI validations remain persisted and immutable; revocation only removes future validator access.
       parameters:
         - { in: path, name: targetUserId, required: true, schema: { type: integer, format: int64 } }
         - { in: path, name: plantId, required: true, schema: { type: integer, format: int64 } }
