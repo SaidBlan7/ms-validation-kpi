@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: GBC 2.0 KPI Validation Service
-  version: 0.22.0
+  version: 0.23.0
   description: KPI Manuales Specs 01-08 plus KPI Validation. Spec 08 exposes stable creation/update trace metadata in the plant timezone snapshot and closes the exact 8-hour edit boundary as end-exclusive. Specs 04-07 numeric/catalog rules remain active. Manual capture stays isolated from Validation/Approval KPI. PostgreSQL persistence uses canonical kpi.kpi_result with source_mode=MANUAL and source_snapshot for the versioned composite capture, as confirmed by Data. Aprobación KPI Specs 01-03 añade revisión/decisión OEE y desperdicios, asignación de jefaturas por planta y visualización histórica/filtrable de validaciones con detalle legible para Front. La autorización de aprobación exige rol/capability vigente más user_plant_access vigente para la planta; revocaciones aplican en la siguiente petición.
 paths:
   /api/v1/kpi-approval/scope/policy:
@@ -79,7 +79,7 @@ paths:
         - { in: query, name: offset, required: false, schema: { type: integer, minimum: 0, default: 0 } }
         - { in: query, name: limit, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
       responses:
-        '200': { description: Authorized validation page with total count and enriched original/proposed change details }
+        '200': { description: Authorized validation page with total count and enriched original/proposed/effective change details. effectiveValue is proposed only for APPROVED; otherwise original. }
         '401': { description: Authentication required }
         '403': { description: Approval scope denied }
         '400': { description: Invalid filters or pagination }
@@ -89,7 +89,7 @@ paths:
       parameters:
         - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
       responses:
-        '200': { description: Validation with original/proposed values and evidence }
+        '200': { description: Validation with original/proposed/effective values and evidence. effectiveValue is proposed only for APPROVED; otherwise original. }
         '403': { description: Approval scope denied }
         '404': { description: Validation not found }
   /api/v1/kpi-approval/validations/{id}/decision:
@@ -108,7 +108,7 @@ paths:
               properties:
                 decision: { type: string, enum: [APPROVED, REJECTED] }
       responses:
-        '200': { description: Final validation state }
+        '200': { description: Final validation state with effectiveValue resolved server-side; APPROVED returns proposedValue as effective, REJECTED returns originalValue as effective. }
         '403': { description: Approval scope denied }
         '404': { description: Validation not found }
         '409': { description: Validation already decided or expired }

@@ -49,7 +49,7 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
              kr,r.getString("kpi_code"),r.getString("kpi_name"),
              sc,r.getString("stop_classification_code"),r.getString("stop_classification_name"),r.getString("oee_stop_type_code"),
              md,r.getString("metric_code"),r.getString("metric_name"),r.getString("metric_source_domain"),
-             r.getBigDecimal("original_value"),r.getBigDecimal("proposed_value"),objLong(r,"uom_id"),r.getString("uom_code"),r.getString("uom_name")));
+             r.getBigDecimal("original_value"),r.getBigDecimal("proposed_value"),null,null,objLong(r,"uom_id"),r.getString("uom_code"),r.getString("uom_name")));
      String sourceDomain=r.getString("metric_source_domain");
      if(sourceDomain!=null&&!sourceDomain.isBlank())x.metricSourceDomains.add(sourceDomain.trim().toUpperCase(Locale.ROOT));
     }
@@ -66,7 +66,8 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
    boolean waste=!stop&&!metricSourceDomains.isEmpty()&&metricSourceDomains.stream().allMatch("WASTE"::equals);
    String domain=waste?"WASTE":"OEE";
    String kind=waste?"WASTE_METRIC":stop?"STOP_TIME":metric?"MASS_PERFORMANCE":kpi?"KPI_RESULT":"OEE_OTHER";
-   return new ApprovalValidationView(id,domain,kind,status,plant,line,date,reason,justification,cause,plan,incident,proposedBy,proposedByName,proposedAt,expires,decidedBy,decidedByName,decidedAt,"PENDING".equals(status),changes);
+   List<ApprovalValueChangeView> effectiveChanges=changes.stream().map(x->x.withEffectiveForStatus(status)).toList();
+   return new ApprovalValidationView(id,domain,kind,status,plant,line,date,reason,justification,cause,plan,incident,proposedBy,proposedByName,proposedAt,expires,decidedBy,decidedByName,decidedAt,"PENDING".equals(status),effectiveChanges);
   }
  }
 }

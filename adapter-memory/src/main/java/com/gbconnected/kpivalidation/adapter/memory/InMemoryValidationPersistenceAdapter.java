@@ -200,7 +200,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
                 r.incidentReference(), r.proposedByUserId(), proposer, r.proposedAt(), r.expiresAt(), r.decidedByUserId(),
                 null, r.decidedAt(), "PENDING".equals(r.status()),
                 List.of(new ApprovalValueChangeView(r.kpiResultId(), r.metricCode(), r.metricCode(), null, null, null, null,
-                        null, null, null, null, r.originalValue(), r.proposedValue(), r.uomId(), null, null)));
+                        null, null, null, null, r.originalValue(), r.proposedValue(), null, null, r.uomId(), null, null).withEffectiveForStatus(r.status())));
     }
 
     private ApprovalValidationView approval(StopTimeValidationResult r) {
@@ -211,7 +211,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
                 null, r.decidedAt(), "PENDING".equals(r.status()),
                 List.of(new ApprovalValueChangeView(null, null, null, r.stopClassificationId(), r.classificationCode(),
                         r.classificationName(), r.programmingType(), null, null, null, null,
-                        java.math.BigDecimal.valueOf(r.originalSeconds()), java.math.BigDecimal.valueOf(r.proposedSeconds()), null, "SECOND", "Seconds")));
+                        java.math.BigDecimal.valueOf(r.originalSeconds()), java.math.BigDecimal.valueOf(r.proposedSeconds()), null, null, null, "SECOND", "Seconds").withEffectiveForStatus(r.status())));
     }
 
     private ApprovalValidationView approval(MassPerformanceValidationResult r) {
@@ -222,7 +222,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
                 r.incidentReference(), r.proposedByUserId(), proposer, r.proposedAt(), r.expiresAt(), r.approvedByUserId(),
                 null, r.approvedAt(), "PENDING".equals(r.status()),
                 List.of(new ApprovalValueChangeView(null, null, null, null, null, null, null, null, metricCode, metricCode, "OEE",
-                        r.originalValue(), r.proposedValue(), r.uomId(), null, null)));
+                        r.originalValue(), r.proposedValue(), null, null, r.uomId(), null, null).withEffectiveForStatus(r.status())));
     }
 
     private static ValidationAuditEvidenceView audit(long userId, java.time.Instant at) {
