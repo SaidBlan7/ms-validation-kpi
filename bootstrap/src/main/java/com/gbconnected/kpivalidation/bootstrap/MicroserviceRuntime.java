@@ -187,7 +187,7 @@ public final class MicroserviceRuntime implements AutoCloseable {
 
         String role = env.get("GBC_KPI_VALIDATOR_ROLE");
         if ("memory".equalsIgnoreCase(settings.mode()) && (role == null || role.isBlank())) {
-            role = "KPI_OEE_VALIDATOR";
+            role = "VALIDADOR";
         }
 
         String configuredAssignments = env.get("GBC_KPI_VALIDATOR_ASSIGNMENTS");

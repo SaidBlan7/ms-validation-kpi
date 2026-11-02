@@ -74,7 +74,7 @@
 # Spec 01 v1.2 — hardening sin persistencia
 
 - autorización PostgreSQL/Lakebase migrada a `app_security.user_role_assignment` + role/capability vigentes.
-- códigos semánticos configurables: `KPI_OEE_VALIDATOR` y `KPI_OEE_VALIDATION`.
+- códigos semánticos configurables de la versión original: `KPI_OEE_VALIDATOR` y `KPI_OEE_VALIDATION`; el modelo canónico actual usa rol `VALIDADOR` y capability `KPI_OEE_VALIDATION`.
 - `GBC_KPI_VALIDATOR_ASSIGNMENTS` queda sólo como fixture `memory`.
 - detección runtime del máximo de dos validadores activos por planta.
 - contrato semántico de estados `PENDING_APPROVAL`, `APPROVED`, `REJECTED`.

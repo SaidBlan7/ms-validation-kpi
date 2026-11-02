@@ -1047,11 +1047,11 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                                 : "Validator assignment source is not configured"),
                 new CapabilityView("assignmentRevocation", assignments,
                         validatorAssignments.enforcesRoleCapability()
-                                ? "Closing user_role_assignment.valid_to revokes the canonical plant assignment without redeploy"
+                                ? "Closing user_plant_access.valid_to revokes the canonical plant scope without redeploy"
                                 : "Remove the external assignment and restart/redeploy"),
                 new CapabilityView("assignmentChangeAudit", validatorAssignments.enforcesRoleCapability() && validatorAssignmentAdministration.available() ? "IMPLEMENTED_CANONICAL_AUDIT" : "PENDING_EXTERNAL_INTEGRATION",
                         validatorAssignments.enforcesRoleCapability()
-                                ? "Admin writes set audit.change_log session actor/source/correlation; user_role_assignment preserves assigned_by_user_id, reason and validity history"
+                                ? "Admin writes set audit.change_log session actor/source/correlation; user_plant_access preserves granted_by_user_id, reason and validity history"
                                 : "Assignment administration is external"),
                 new CapabilityView("assignmentPolicyContract", "IMPLEMENTED_SPEC_02",
                         "Spec 02 supports policy, self-scope, admin list, assign, modify and revoke; external approval remains outside GBC but its reference is mandatory on assign/modify"),

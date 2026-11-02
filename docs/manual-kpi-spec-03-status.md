@@ -48,7 +48,7 @@ Se corrige la interacción entre 96 h y 8 h. Antes el `save` validaba 96 h antes
 También se expone la evaluación de fecha como contrato explícito para que UI pueda mostrar la fecha objetivo y su periodo antes de guardar.
 
 ### Spec 02
-No cambia el modelo de autorización. La evaluación temporal reutiliza exactamente el alcance efectivo de planta/línea y la zona horaria canónica de la planta. Se aclara en documentación que la administración de alcance KPI Manuales no concede `user_plant_access` general.
+No cambia el modelo de autorización. La evaluación temporal reutiliza exactamente el alcance efectivo de planta/línea y la zona horaria canónica de la planta. El alcance de planta de KPI Manuales se representa canónicamente mediante `user_plant_access`; el rol/capability determina qué puede hacer el usuario y el acceso temporal a planta determina dónde puede hacerlo.
 
 ## Base canónica
 No se necesita pedir DDL ni catálogo de festivos a Data para esta spec:

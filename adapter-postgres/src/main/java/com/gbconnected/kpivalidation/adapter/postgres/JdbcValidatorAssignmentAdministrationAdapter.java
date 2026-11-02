@@ -98,8 +98,8 @@ public final class JdbcValidatorAssignmentAdministrationAdapter implements Valid
     private boolean exists(String q,Binder b){try(Connection c=dataSource.getConnection();PreparedStatement p=c.prepareStatement(q)){b.bind(p);try(ResultSet r=p.executeQuery()){return r.next()&&r.getBoolean(1);}}catch(SQLException e){throw new IllegalStateException("Unable to resolve assignment administration configuration",e);}}
     private void setAudit(Connection c,long actor,String corr)throws SQLException{try(PreparedStatement p=c.prepareStatement("SELECT set_config('app.user_id', ?, true),set_config('app.source_system','GBC_APP',true),set_config('app.correlation_id', ?, true)")){p.setString(1,Long.toString(actor));p.setString(2,corr==null?"":corr);p.execute();}}
     private void lock(Connection c,long plant)throws SQLException{try(PreparedStatement p=c.prepareStatement("SELECT pg_advisory_xact_lock(hashtextextended(?,0))")){p.setString(1,"kpi-oee-validator-assignment:"+plant);p.execute();}}
-    private static String assignmentReason(String approval,String reason){String a=required(approval,"externalApprovalReference"),r=normalize(reason);return "KPI_OEE_VALIDATOR | externalApprovalReference="+a+(r==null?"":" | reason="+r);}
-    private static String revocationReason(String reason){return "KPI_OEE_VALIDATOR_REVOKED | reason="+required(reason,"reason");}
+    private static String assignmentReason(String approval,String reason){String a=required(approval,"externalApprovalReference"),r=normalize(reason);return "KPI_OEE_VALIDATION_SCOPE | externalApprovalReference="+a+(r==null?"":" | reason="+r);}
+    private static String revocationReason(String reason){return "KPI_OEE_VALIDATION_SCOPE_REVOKED | reason="+required(reason,"reason");}
     private static String required(String v,String f){if(v==null||v.isBlank())throw new IllegalArgumentException(f+" is required");return v.trim();}
     private static String normalize(String v){return v==null||v.isBlank()?null:v.trim();}
     @FunctionalInterface private interface Binder{void bind(PreparedStatement p)throws SQLException;}
