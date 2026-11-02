@@ -11,12 +11,12 @@ paths:
         '200': { description: Cardinality, revocation and reassignment policy }
   /api/v1/kpi-approval/scope/admin/assignments:
     get:
-      summary: Lists KPI Approval jefatura assignments for a plant
+      summary: Lists KPI Approval jefatura assignments for an administratively authorized plant
       parameters:
         - { in: query, name: plantId, required: true, schema: { type: integer, format: int64 } }
       responses:
         '200': { description: Historical plant-scoped approver assignments }
-        '403': { description: Scope administration denied }
+        '403': { description: Scope administration denied; actor lacks admin capability or current plant access }
     post:
       summary: Assigns KPI Approval capability to a jefatura for one plant
       description: Requires the target user to have the configured current canonical role/capability. Creates temporal app_security.user_plant_access for the plant and preserves canonical audit history.
@@ -33,11 +33,11 @@ paths:
                 reason: { type: string }
       responses:
         '200': { description: Created assignment }
-        '403': { description: Scope administration denied }
-        '409': { description: Effective assignment already exists or target lacks generic plant access }
+        '403': { description: Scope administration denied; actor lacks admin capability or current plant access }
+        '409': { description: Effective assignment already exists or target lacks the required current canonical approval role/capability }
     delete:
       summary: Revokes one plant-scoped KPI Approval assignment
-      description: Closes valid_to; it does not delete generic plant access. Revocation is effective on the next server request.
+      description: Closes app_security.user_plant_access.valid_to for the target user and plant. Revocation is effective on the next server request; pending validations remain attached to the plant and become available only to currently authorized approvers.
       requestBody:
         required: true
         content:
@@ -51,7 +51,7 @@ paths:
                 reason: { type: string }
       responses:
         '200': { description: Revoked assignment }
-        '403': { description: Scope administration denied }
+        '403': { description: Scope administration denied; actor lacks admin capability or current plant access }
         '409': { description: No effective assignment exists }
   /api/v1/kpi-approval/policy:
     get:
@@ -79,7 +79,7 @@ paths:
         - { in: query, name: offset, required: false, schema: { type: integer, minimum: 0, default: 0 } }
         - { in: query, name: limit, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
       responses:
-        '200': { description: Authorized validation page with total count and enriched original/proposed/effective change details. effectiveValue is proposed only for APPROVED; otherwise original. }
+        '200': { description: Authorized validation page with total count, plant/line display metadata and enriched original/proposed/effective change details. effectiveValue is proposed only for APPROVED; otherwise original. }
         '401': { description: Authentication required }
         '403': { description: Approval scope denied }
         '400': { description: Invalid filters or pagination }
@@ -89,7 +89,7 @@ paths:
       parameters:
         - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
       responses:
-        '200': { description: Validation with original/proposed/effective values and evidence. effectiveValue is proposed only for APPROVED; otherwise original. }
+        '200': { description: Validation with plant/line display metadata, original/proposed/effective values and evidence. effectiveValue is proposed only for APPROVED; otherwise original. }
         '403': { description: Approval scope denied }
         '404': { description: Validation not found }
   /api/v1/kpi-approval/validations/{id}/decision:

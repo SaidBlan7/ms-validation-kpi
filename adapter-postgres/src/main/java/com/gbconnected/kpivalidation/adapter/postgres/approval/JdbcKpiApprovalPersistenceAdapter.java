@@ -19,7 +19,7 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
  public boolean supportsWasteValidations(){return true;}
  private List<ApprovalValidationView> query(Long id,boolean pendingOnly){
   StringBuilder sql=new StringBuilder("""
-   SELECT v.kpi_validation_id,v.plant_id,v.line_id,v.oee_date,v.status_code,v.reason_type,v.justification,v.cause,v.action_plan,v.incident_reference,
+   SELECT v.kpi_validation_id,v.plant_id,p.plant_code,p.plant_name,v.line_id,l.line_code,l.line_name,v.oee_date,v.status_code,v.reason_type,v.justification,v.cause,v.action_plan,v.incident_reference,
           v.proposed_by_user_id,pu.display_name AS proposed_by_display_name,v.proposed_at,v.expires_at,
           v.approved_by_user_id,du.display_name AS decided_by_display_name,v.approved_at,
           d.kpi_result_id,kd.kpi_code,kd.kpi_name,
@@ -27,6 +27,8 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
           d.metric_definition_id,md.metric_code,md.metric_name,md.source_domain AS metric_source_domain,
           d.original_value,d.proposed_value,d.uom_id,u.uom_code,u.uom_name
      FROM kpi.kpi_validation v
+     JOIN core.plant p ON p.plant_id=v.plant_id
+     LEFT JOIN core.line l ON l.line_id=v.line_id
      LEFT JOIN app_security.user_identity pu ON pu.user_id=v.proposed_by_user_id
      LEFT JOIN app_security.user_identity du ON du.user_id=v.approved_by_user_id
      LEFT JOIN kpi.kpi_validation_detail d ON d.kpi_validation_id=v.kpi_validation_id
@@ -59,15 +61,15 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
  private static Long objLong(ResultSet r,String n)throws SQLException{long v=r.getLong(n);return r.wasNull()?null:v;}
  private static Instant instant(ResultSet r,String n)throws SQLException{Object o=r.getObject(n);if(o==null)return null;if(o instanceof OffsetDateTime x)return x.toInstant();if(o instanceof Timestamp t)return t.toInstant();throw new SQLException("Unsupported timestamp type");}
  private static void auditContext(Connection c,Long user,String corr)throws SQLException{try(PreparedStatement p=c.prepareStatement("SELECT set_config('app.user_id', ?, true), set_config('app.source_system','GBC_APP',true), set_config('app.correlation_id', ?, true)")){p.setString(1,user==null?"":Long.toString(user));p.setString(2,corr==null?"":corr);p.execute();}}
- private static final class Builder {long id,plant;Long line;LocalDate date;String status,reason,justification,cause,plan,incident,proposedByName,decidedByName;long proposedBy;Instant proposedAt,expires;Long decidedBy;Instant decidedAt;List<ApprovalValueChangeView> changes=new ArrayList<>();Set<String> metricSourceDomains=new LinkedHashSet<>();
-  Builder(ResultSet r){try{id=r.getLong("kpi_validation_id");plant=r.getLong("plant_id");line=objLong(r,"line_id");date=r.getObject("oee_date",LocalDate.class);status=r.getString("status_code");reason=r.getString("reason_type");justification=r.getString("justification");cause=r.getString("cause");plan=r.getString("action_plan");incident=r.getString("incident_reference");proposedBy=r.getLong("proposed_by_user_id");proposedByName=r.getString("proposed_by_display_name");proposedAt=instant(r,"proposed_at");expires=instant(r,"expires_at");decidedBy=objLong(r,"approved_by_user_id");decidedByName=r.getString("decided_by_display_name");decidedAt=instant(r,"approved_at");}catch(SQLException e){throw new IllegalStateException(e);}}
+ private static final class Builder {long id,plant;Long line;LocalDate date;String plantCode,plantName,lineCode,lineName,status,reason,justification,cause,plan,incident,proposedByName,decidedByName;long proposedBy;Instant proposedAt,expires;Long decidedBy;Instant decidedAt;List<ApprovalValueChangeView> changes=new ArrayList<>();Set<String> metricSourceDomains=new LinkedHashSet<>();
+  Builder(ResultSet r){try{id=r.getLong("kpi_validation_id");plant=r.getLong("plant_id");plantCode=r.getString("plant_code");plantName=r.getString("plant_name");line=objLong(r,"line_id");lineCode=r.getString("line_code");lineName=r.getString("line_name");date=r.getObject("oee_date",LocalDate.class);status=r.getString("status_code");reason=r.getString("reason_type");justification=r.getString("justification");cause=r.getString("cause");plan=r.getString("action_plan");incident=r.getString("incident_reference");proposedBy=r.getLong("proposed_by_user_id");proposedByName=r.getString("proposed_by_display_name");proposedAt=instant(r,"proposed_at");expires=instant(r,"expires_at");decidedBy=objLong(r,"approved_by_user_id");decidedByName=r.getString("decided_by_display_name");decidedAt=instant(r,"approved_at");}catch(SQLException e){throw new IllegalStateException(e);}}
   ApprovalValidationView build(){
    boolean stop=changes.stream().anyMatch(x->x.stopClassificationId()!=null),metric=changes.stream().anyMatch(x->x.metricDefinitionId()!=null),kpi=changes.stream().anyMatch(x->x.kpiResultId()!=null);
    boolean waste=!stop&&!metricSourceDomains.isEmpty()&&metricSourceDomains.stream().allMatch("WASTE"::equals);
    String domain=waste?"WASTE":"OEE";
    String kind=waste?"WASTE_METRIC":stop?"STOP_TIME":metric?"MASS_PERFORMANCE":kpi?"KPI_RESULT":"OEE_OTHER";
    List<ApprovalValueChangeView> effectiveChanges=changes.stream().map(x->x.withEffectiveForStatus(status)).toList();
-   return new ApprovalValidationView(id,domain,kind,status,plant,line,date,reason,justification,cause,plan,incident,proposedBy,proposedByName,proposedAt,expires,decidedBy,decidedByName,decidedAt,"PENDING".equals(status),effectiveChanges);
+   return new ApprovalValidationView(id,domain,kind,status,plant,plantCode,plantName,line,lineCode,lineName,date,reason,justification,cause,plan,incident,proposedBy,proposedByName,proposedAt,expires,decidedBy,decidedByName,decidedAt,"PENDING".equals(status),effectiveChanges);
   }
  }
 }

@@ -195,7 +195,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
 
     private ApprovalValidationView approval(OeeValidationResult r) {
         String proposer = r.auditEvidence() == null ? null : r.auditEvidence().displayNameSnapshot();
-        return new ApprovalValidationView(r.validationId(), "OEE", "KPI_RESULT", r.status(), r.plantId(), r.lineId(),
+        return new ApprovalValidationView(r.validationId(), "OEE", "KPI_RESULT", r.status(), r.plantId(), null, null, r.lineId(), null, null,
                 r.businessDate(), r.reasonType().name(), r.justification(), r.operationalCause(), r.actionPlan(),
                 r.incidentReference(), r.proposedByUserId(), proposer, r.proposedAt(), r.expiresAt(), r.decidedByUserId(),
                 null, r.decidedAt(), "PENDING".equals(r.status()),
@@ -205,7 +205,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
 
     private ApprovalValidationView approval(StopTimeValidationResult r) {
         String proposer = r.auditEvidence() == null ? null : r.auditEvidence().displayNameSnapshot();
-        return new ApprovalValidationView(r.validationId(), "OEE", "STOP_TIME", r.status(), r.plantId(), r.lineId(),
+        return new ApprovalValidationView(r.validationId(), "OEE", "STOP_TIME", r.status(), r.plantId(), null, null, r.lineId(), null, null,
                 r.businessDate(), r.reasonType().name(), r.justification(), r.operationalCause(), r.actionPlan(),
                 r.incidentReference(), r.proposedByUserId(), proposer, r.proposedAt(), r.expiresAt(), r.decidedByUserId(),
                 null, r.decidedAt(), "PENDING".equals(r.status()),
@@ -217,7 +217,7 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     private ApprovalValidationView approval(MassPerformanceValidationResult r) {
         String proposer = r.auditEvidence() == null ? null : r.auditEvidence().displayNameSnapshot();
         String metricCode = r.variable().name();
-        return new ApprovalValidationView(r.validationId(), "OEE", "MASS_PERFORMANCE", r.status(), r.plantId(), r.lineId(),
+        return new ApprovalValidationView(r.validationId(), "OEE", "MASS_PERFORMANCE", r.status(), r.plantId(), null, null, r.lineId(), null, null,
                 r.businessDate(), r.reasonType().name(), r.justification(), r.operationalCause(), r.actionPlan(),
                 r.incidentReference(), r.proposedByUserId(), proposer, r.proposedAt(), r.expiresAt(), r.approvedByUserId(),
                 null, r.approvedAt(), "PENDING".equals(r.status()),

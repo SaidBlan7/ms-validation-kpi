@@ -13,8 +13,9 @@ public final class JdbcKpiApprovalScopeAdministrationAdapter implements KpiAppro
     public boolean canAdminister(UUID tenant,UUID object,long plant){if(tenant==null||object==null||plant<=0)return false;String q="""
       SELECT EXISTS(SELECT 1 FROM app_security.user_identity u JOIN app_security.user_role_assignment ura ON ura.user_id=u.user_id
       JOIN app_security.role r ON r.role_id=ura.role_id AND r.is_active=TRUE JOIN app_security.role_capability rc ON rc.role_id=r.role_id JOIN app_security.capability c ON c.capability_id=rc.capability_id AND c.is_active=TRUE
-      WHERE u.entra_tenant_id=? AND u.entra_object_id=? AND u.is_active=TRUE AND c.capability_code=? AND ura.valid_from<=CURRENT_TIMESTAMP AND (ura.valid_to IS NULL OR ura.valid_to>CURRENT_TIMESTAMP) AND rc.valid_from<=CURRENT_TIMESTAMP AND (rc.valid_to IS NULL OR rc.valid_to>CURRENT_TIMESTAMP) AND (ura.plant_id IS NULL OR ura.plant_id=?))
-      """;return exists(q,p->{p.setObject(1,tenant);p.setObject(2,object);p.setString(3,adminCapability);p.setLong(4,plant);});}
+      JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id AND upa.plant_id=?
+      WHERE u.entra_tenant_id=? AND u.entra_object_id=? AND u.is_active=TRUE AND c.capability_code=? AND ura.valid_from<=CURRENT_TIMESTAMP AND (ura.valid_to IS NULL OR ura.valid_to>CURRENT_TIMESTAMP) AND rc.valid_from<=CURRENT_TIMESTAMP AND (rc.valid_to IS NULL OR rc.valid_to>CURRENT_TIMESTAMP) AND upa.valid_from<=CURRENT_TIMESTAMP AND (upa.valid_to IS NULL OR upa.valid_to>CURRENT_TIMESTAMP) AND (ura.plant_id IS NULL OR ura.plant_id=?))
+      """;return exists(q,p->{p.setLong(1,plant);p.setObject(2,tenant);p.setObject(3,object);p.setString(4,adminCapability);p.setLong(5,plant);});}
     public List<KpiApproverPlantAssignment> list(long plant){String q="""
       SELECT upa.user_plant_access_id assignment_id,upa.user_id,upa.plant_id,upa.valid_from,upa.valid_to,upa.granted_by_user_id assigned_by_user_id,upa.reason,
        (u.is_active AND upa.valid_from<=CURRENT_TIMESTAMP AND (upa.valid_to IS NULL OR upa.valid_to>CURRENT_TIMESTAMP)

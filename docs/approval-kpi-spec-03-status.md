@@ -10,7 +10,7 @@ Estado: **IMPLEMENTADA**.
 - La autorización sigue siendo server-side por acceso general de planta + asignación/capability específica de Aprobación KPI.
 - Antes de listar o consultar, los PENDING cuyo `expires_at` ya pasó se transicionan a `EXPIRED`; por lo tanto `decidable=false` para registros históricos.
 - OEE y WASTE se distinguen en el mismo contrato. WASTE se identifica canónicamente por detalles con `metric_definition.source_domain = 'WASTE'` y sin mezcla de clasificación de paro OEE.
-- El detalle expone valores original/propuesto y referencias legibles disponibles: KPI, métrica, clasificación de paro, agrupación OEE y unidad.
+- El detalle expone valores original/propuesto y referencias legibles disponibles: planta, línea, KPI, métrica, clasificación de paro, agrupación OEE y unidad. `plantCode`/`plantName` salen de `core.plant`; `lineCode`/`lineName` salen de `core.line` cuando existe línea asociada.
 - Se expone el ID estable del validador/decisor y su `display_name` actual cuando existe en `app_security.user_identity`.
 - Justificación, causa, plan de acción e `incident_reference` permanecen disponibles como evidencia común del flujo de origen.
 
@@ -32,6 +32,7 @@ La lectura usa exclusivamente estructuras existentes:
 - `kpi.metric_definition`
 - `stops.stop_classification`
 - `core.unit_of_measure`
+- `core.plant` / `core.line`
 - `app_security.user_identity`
 
 No requiere cambios de esquema.
