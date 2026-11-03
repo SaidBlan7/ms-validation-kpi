@@ -333,7 +333,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 canonical ? validatorAssignmentAdministration.adminCapabilityCode() : null,
                 2,
                 "PLANT_SPECIFIC_KPI_OEE_PERMISSION",
-                "CURRENT_GENERIC_USER_PLANT_ACCESS_REQUIRED",
+                "CURRENT_KPI_OEE_SCOPED_USER_PLANT_ACCESS_REQUIRED",
                 "EXTERNAL_GLOBAL_SUPPLY_CHAIN_APPROVAL",
                 canonical ? (validatorAssignmentAdministration.available() ? "IN_MICROSERVICE_CANONICAL_ADMIN_API" : "PENDING_ADMIN_CAPABILITY_REFERENCE_DATA") : "LOCAL_FIXTURE_CONFIGURATION",
                 canonical ? "INDEFINITE_UNTIL_EXPLICIT_REVOCATION" : "CONFIGURATION_LIFETIME",
@@ -341,7 +341,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 canonical
                         ? "TRANSACTIONAL_WRITE_TIME_LIMIT_WITH_PLANT_ADVISORY_LOCK"
                         : "LOCAL_CONFIGURATION_REJECTS_MORE_THAN_TWO",
-                canonical ? "ADMIN_API_CLOSES_USER_ROLE_ASSIGNMENT_VALID_TO" : "REMOVE_LOCAL_ASSIGNMENT_AND_RELOAD",
+                canonical ? "ADMIN_API_CLOSES_KPI_OEE_SCOPED_USER_PLANT_ACCESS_VALID_TO" : "REMOVE_LOCAL_ASSIGNMENT_AND_RELOAD",
                 canonical
                         ? "CANONICAL_HISTORY_PLUS_AUDIT_CHANGE_LOG_ACTOR_CORRELATION_AND_REASON"
                         : "NO_PERSISTENT_ASSIGNMENT_AUDIT",
