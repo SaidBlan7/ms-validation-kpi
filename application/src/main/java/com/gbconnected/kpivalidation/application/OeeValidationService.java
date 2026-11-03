@@ -789,6 +789,11 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
     @Override
     public MassPerformanceValidationResult getMassPerformanceValidation(ActorContext actor, long validationId) {
         if (validationId <= 0) throw new IllegalArgumentException("validationId must be positive");
+        List<ValidationIssue> identityIssues = new ArrayList<>();
+        validateModuleEntitlement(actor, identityIssues);
+        if (identityIssues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
+            throw new AuthorizationException("Actor is not authorized to read this mass-performance validation");
+        }
         MassPerformanceValidationResult result = validationPersistence.findMassPerformanceById(validationId)
                 .orElseThrow(() -> new ValidationNotFoundException("Mass-performance validation not found"));
         List<ValidationIssue> issues = new ArrayList<>();

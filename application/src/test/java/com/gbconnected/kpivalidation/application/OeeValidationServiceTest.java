@@ -81,6 +81,19 @@ class OeeValidationServiceTest {
     }
 
     @Test
+    void anonymousMassDetailIsDeniedBeforePersistenceLookup() {
+        assertThrows(AuthorizationException.class, () -> service(true).getMassPerformanceValidation(null, 123L));
+        assertThrows(AuthorizationException.class, () -> service(true).getMassPerformanceValidation(
+                new ActorContext(null, O, Set.of("GB.KPI.Validator")), 123L));
+    }
+
+    @Test
+    void unauthorizedMassDetailIsDeniedBeforePersistenceLookup() {
+        assertThrows(AuthorizationException.class, () -> service(true).getMassPerformanceValidation(
+                new ActorContext(T, O, Set.of("OTHER_ROLE")), 123L));
+    }
+
+    @Test
     void anonymousStopTimeDetailIsDeniedBeforePersistenceLookup() {
         assertThrows(AuthorizationException.class, () -> service(true).getStopTimeValidation(null, 123L));
         assertThrows(AuthorizationException.class, () -> service(true).getStopTimeValidation(
