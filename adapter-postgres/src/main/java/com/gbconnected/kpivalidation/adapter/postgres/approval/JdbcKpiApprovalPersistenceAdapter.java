@@ -181,7 +181,7 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
              kr,r.getString("kpi_code"),r.getString("kpi_name"),
              sc,r.getString("stop_classification_code"),r.getString("stop_classification_name"),r.getString("oee_stop_type_code"),
              md,r.getString("metric_code"),r.getString("metric_name"),r.getString("metric_source_domain"),
-             r.getBigDecimal("original_value"),r.getBigDecimal("proposed_value"),null,null,objLong(r,"uom_id"),r.getString("uom_code"),r.getString("uom_name")));
+             r.getBigDecimal("original_value"),r.getBigDecimal("proposed_value"),null,null,objLong(r,"uom_id"),r.getString("uom_code"),r.getString("uom_name"),objLong(r,"kpi_validation_detail_id")));
      String sourceDomain=r.getString("metric_source_domain");
      if(sourceDomain!=null&&!sourceDomain.isBlank())x.metricSourceDomains.add(sourceDomain.trim().toUpperCase(Locale.ROOT));
     }

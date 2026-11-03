@@ -79,7 +79,7 @@ paths:
         - { in: query, name: offset, required: false, schema: { type: integer, minimum: 0, default: 0 } }
         - { in: query, name: limit, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
       responses:
-        '200': { description: Authorized validation page with total count, plant/line display metadata and enriched original/proposed/effective change details. effectiveValue is proposed only for APPROVED; otherwise original. }
+        '200': { description: Authorized validation page with total count, plant/line display metadata and enriched original/proposed/effective change details, including kpiValidationDetailId when persisted. effectiveValue is proposed only for APPROVED; otherwise original. }
         '401': { description: Authentication required }
         '403': { description: Approval scope denied }
         '400': { description: Invalid filters or pagination }
@@ -89,7 +89,7 @@ paths:
       parameters:
         - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
       responses:
-        '200': { description: Validation with plant/line display metadata, original/proposed/effective values and evidence. effectiveValue is proposed only for APPROVED; otherwise original. }
+        '200': { description: Validation with plant/line display metadata, original/proposed/effective values, kpiValidationDetailId (when persisted), and evidence. effectiveValue is proposed only for APPROVED; otherwise original. }
         '403': { description: Approval scope denied }
         '404': { description: Validation not found }
   /api/v1/kpi-approval/validations/{id}/decision:
@@ -108,7 +108,7 @@ paths:
               properties:
                 decision: { type: string, enum: [APPROVED, REJECTED] }
       responses:
-        '200': { description: Final validation state with effectiveValue resolved server-side; APPROVED returns proposedValue as effective, REJECTED returns originalValue as effective. }
+        '200': { description: Final validation state with canonical detail IDs and effectiveValue resolved server-side; APPROVED returns proposedValue as effective, REJECTED returns originalValue as effective. }
         '403': { description: Approval scope denied }
         '404': { description: Validation not found }
         '409': { description: Validation already decided or expired }
