@@ -132,6 +132,11 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
 
     @Override
     public synchronized ApprovalValidationView decide(long validationId, long userId, ApprovalDecision decision, Instant at, String correlationId) {
+        java.util.Objects.requireNonNull(decision, "decision");
+        java.util.Objects.requireNonNull(at, "decision time");
+        // Match PostgreSQL: expiration is a persisted final state, not merely a rejected request.
+        // This is synchronized with the decision, so no other Memory caller can win after expiry.
+        expirePending(at, correlationId);
         ApprovalValidationView current = find(validationId).orElseThrow(() -> new ApprovalNotFoundException("KPI validation not found"));
         if (!"PENDING".equals(current.status())) {
             if (current.status().equals(decision.name()) && java.util.Objects.equals(current.decidedByUserId(), userId)) return current;
