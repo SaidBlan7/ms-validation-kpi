@@ -49,11 +49,32 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
                 -- without multiplying them on multi-day stops.
                 fragment_seconds AS (
                     SELECT f.stop_fragment_id, e.stop_event_id,
-                           GREATEST(0::bigint, LEAST(
-                               COALESCE(f.line_downtime_seconds::bigint,
-                                   EXTRACT(EPOCH FROM (LEAST(COALESCE(f.ended_at, b.day_to), b.day_to) - GREATEST(f.started_at, b.day_from)))::bigint),
-                               EXTRACT(EPOCH FROM (LEAST(COALESCE(f.ended_at, b.day_to), b.day_to) - GREATEST(f.started_at, b.day_from)))::bigint
-                           )) AS day_seconds
+                           -- When line_downtime_seconds differs from the elapsed
+                           -- fragment duration, clipping its full value to *each*
+                           -- calendar day duplicates downtime across midnight.
+                           -- Distribute integer seconds across the fragment using
+                           -- cumulative floors, so adjacent days partition the
+                           -- same total without double-counting rounding residues.
+                           CASE
+                             WHEN f.line_downtime_seconds IS NULL THEN
+                               GREATEST(0::bigint, FLOOR(EXTRACT(EPOCH FROM (
+                                 LEAST(COALESCE(f.ended_at, b.day_to), b.day_to)
+                                 - GREATEST(f.started_at, b.day_from)))::numeric)::bigint)
+                             WHEN COALESCE(f.ended_at, b.day_to) <= f.started_at THEN 0::bigint
+                             ELSE GREATEST(0::bigint,
+                               FLOOR(f.line_downtime_seconds::numeric *
+                                 EXTRACT(EPOCH FROM (
+                                   LEAST(COALESCE(f.ended_at, b.day_to), b.day_to)
+                                   - f.started_at))::numeric /
+                                 NULLIF(EXTRACT(EPOCH FROM (
+                                   COALESCE(f.ended_at, b.day_to) - f.started_at))::numeric, 0))::bigint
+                               - FLOOR(f.line_downtime_seconds::numeric *
+                                 EXTRACT(EPOCH FROM (
+                                   GREATEST(f.started_at, b.day_from)
+                                   - f.started_at))::numeric /
+                                 NULLIF(EXTRACT(EPOCH FROM (
+                                   COALESCE(f.ended_at, b.day_to) - f.started_at))::numeric, 0))::bigint)
+                           END AS day_seconds
                       FROM bounds b
                       JOIN stops.stop_fragment f ON f.started_at < b.day_to
                          AND COALESCE(f.ended_at, b.day_to) > b.day_from

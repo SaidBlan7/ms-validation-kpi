@@ -895,10 +895,15 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
     @Override
     public StopTimeValidationResult getStopTimeValidation(ActorContext actor, long validationId) {
         if (validationId <= 0) throw new IllegalArgumentException("validationId must be positive");
-        StopTimeValidationResult result = validationPersistence.findStopTimeById(validationId)
-                .orElseThrow(() -> new ValidationNotFoundException("Stop-time validation not found"));
+        // Authenticate and require the module entitlement before looking up any
+        // validation record. Object-level plant/line scope is checked after lookup.
         List<ValidationIssue> issues = new ArrayList<>();
         validateModuleEntitlement(actor, issues);
+        if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
+            throw new AuthorizationException("Actor is not authorized for KPI OEE validation");
+        }
+        StopTimeValidationResult result = validationPersistence.findStopTimeById(validationId)
+                .orElseThrow(() -> new ValidationNotFoundException("Stop-time validation not found"));
         validateSpecificKpiAssignment(actor, result.plantId(), issues);
         validateFeatureActivation(result.plantId(), issues);
         if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
