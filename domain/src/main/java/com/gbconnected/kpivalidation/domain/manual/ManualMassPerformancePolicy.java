@@ -9,8 +9,10 @@ public final class ManualMassPerformancePolicy {
     public static final String DELIVERED_VARIABLE = "DELIVERED_MASS";
 
     public void validate(BigDecimal elaboratedMass, BigDecimal deliveredMass) {
+        // The policy is invoked only when a massPerformance object is supplied.
+        // An absent section is represented by null, not by two missing values.
         if (elaboratedMass == null && deliveredMass == null) {
-            return;
+            throw new DomainValidationException("elaboratedMass and deliveredMass are required when manual performance is captured");
         }
         if (elaboratedMass == null || deliveredMass == null) {
             throw new DomainValidationException("Both elaboratedMass and deliveredMass are required when manual performance is captured");

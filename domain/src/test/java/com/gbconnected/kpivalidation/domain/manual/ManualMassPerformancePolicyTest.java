@@ -21,6 +21,6 @@ class ManualMassPerformancePolicyTest {
     @Test void requiresThePairWhenPerformanceIsPresent() {
         assertThrows(DomainValidationException.class, () -> policy.validate(BigDecimal.ONE, null));
         assertThrows(DomainValidationException.class, () -> policy.validate(null, BigDecimal.ONE));
-        assertDoesNotThrow(() -> policy.validate(null, null));
+        assertThrows(DomainValidationException.class, () -> policy.validate(null, null));
     }
 }
