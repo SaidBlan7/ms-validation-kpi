@@ -24,11 +24,11 @@ public record CorrectionReason(
         if (type == null) throw new DomainValidationException("reasonType is required");
         if (policy == null) policy = CorrectionReasonPolicy.unbounded();
 
-        String incident = normalizeSingleLine("incidentNumber", incidentNumber);
-        String cause = normalizeFreeText("operationalCause", operationalCause);
-        String plan = normalizeFreeText("actionPlan", actionPlan);
-
+        // A form can retain values entered for another reason type. Only validate
+        // the fields applicable to the selected reason; discarded fields must
+        // never prevent switching the reason or enter persisted evidence.
         if (type == ValidationReasonType.SYSTEM) {
+            String incident = normalizeSingleLine("incidentNumber", incidentNumber);
             if (blank(incident)) {
                 throw new DomainValidationException("incidentNumber is required for SYSTEM reason");
             }
@@ -36,6 +36,8 @@ public record CorrectionReason(
             policy.validateIncidentFormat(incident);
             return new CorrectionReason(type, incident, null, null);
         }
+        String cause = normalizeFreeText("operationalCause", operationalCause);
+        String plan = normalizeFreeText("actionPlan", actionPlan);
         if (blank(cause)) {
             throw new DomainValidationException("operationalCause is required for OPERATIVE reason");
         }
