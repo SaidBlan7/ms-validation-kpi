@@ -22,7 +22,7 @@ public final class JdbcManualKpiAuthorizationAdapter implements ManualKpiAuthori
               JOIN app_security.role r ON r.role_id=ura.role_id AND r.is_active=TRUE
               JOIN app_security.role_capability rc ON rc.role_id=r.role_id
               JOIN app_security.capability c ON c.capability_id=rc.capability_id AND c.is_active=TRUE
-              JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id
+              JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id AND upa.reason LIKE 'KPI_MANUALES:%'
               WHERE u.entra_tenant_id=? AND u.entra_object_id=? AND u.is_active=TRUE
                 AND upa.plant_id=?
                 AND upa.valid_from<=CURRENT_TIMESTAMP AND (upa.valid_to IS NULL OR upa.valid_to>CURRENT_TIMESTAMP)
@@ -35,5 +35,5 @@ public final class JdbcManualKpiAuthorizationAdapter implements ManualKpiAuthori
         try(Connection c=ds.getConnection();PreparedStatement p=c.prepareStatement(q)){p.setObject(1,tenant);p.setObject(2,object);p.setLong(3,plant);p.setString(4,capability);try(ResultSet r=p.executeQuery()){r.next();return r.getBoolean(1);}}catch(SQLException e){throw new IllegalStateException("Unable to authorize Manual KPI actor",e);}
     }
     public String capabilityCode(){return capability;}
-    public String source(){return "APP_SECURITY_CURRENT_ROLE_CAPABILITY_PLUS_USER_PLANT_ACCESS";}
+    public String source(){return "APP_SECURITY_CURRENT_ROLE_CAPABILITY_PLUS_MODULE_TAGGED_USER_PLANT_ACCESS";}
 }

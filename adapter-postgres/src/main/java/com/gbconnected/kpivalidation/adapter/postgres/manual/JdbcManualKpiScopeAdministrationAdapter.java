@@ -10,7 +10,7 @@ import javax.sql.DataSource;
 /**
  * Canonical plant-scope administration for KPI Manuales.
  * The user's single current role carries the module capability; plant scope is
- * the temporal history in app_security.user_plant_access.
+ * the module-tagged temporal history in app_security.user_plant_access.
  */
 public final class JdbcManualKpiScopeAdministrationAdapter implements ManualKpiScopeAdministrationPort {
     private final DataSource ds; private final String roleCode; private final String entryCapability; private final String adminCapability;
@@ -51,7 +51,7 @@ public final class JdbcManualKpiScopeAdministrationAdapter implements ManualKpiS
                                 AND rc.valid_from<=CURRENT_TIMESTAMP AND (rc.valid_to IS NULL OR rc.valid_to>CURRENT_TIMESTAMP))) AS effective
               FROM app_security.user_plant_access upa
               JOIN app_security.user_identity u ON u.user_id=upa.user_id
-             WHERE upa.plant_id=?
+             WHERE upa.plant_id=? AND upa.reason LIKE 'KPI_MANUALES:%'
                AND EXISTS(SELECT 1 FROM app_security.user_role_assignment ura
                           JOIN app_security.role r ON r.role_id=ura.role_id
                          WHERE ura.user_id=upa.user_id AND r.role_code=?)
@@ -67,9 +67,9 @@ public final class JdbcManualKpiScopeAdministrationAdapter implements ManualKpiS
         try(Connection c=ds.getConnection()){
             c.setAutoCommit(false);try{
                 setAudit(c,actor,correlation);lock(c,user,plant);ensurePlantActive(c,plant);ensureTargetRole(c,user,plant);
-                if(currentId(c,user,plant)!=null)throw new ManualKpiScopeConflictException("Target user already has current plant access; canonical KPI Manuales scope is already effective for this plant");
+                if(currentId(c,user,plant)!=null)throw new ManualKpiScopeConflictException("Target user already has a current KPI Manuales plant assignment");
                 long id;try(PreparedStatement p=c.prepareStatement("INSERT INTO app_security.user_plant_access(user_id,plant_id,valid_from,granted_by_user_id,reason) VALUES(?,?,CURRENT_TIMESTAMP,?,?) RETURNING user_plant_access_id")){
-                    p.setLong(1,user);p.setLong(2,plant);p.setLong(3,actor);p.setString(4,normalize(reason));try(ResultSet r=p.executeQuery()){r.next();id=r.getLong(1);}
+                    p.setLong(1,user);p.setLong(2,plant);p.setLong(3,actor);p.setString(4,moduleReason(reason));try(ResultSet r=p.executeQuery()){r.next();id=r.getLong(1);}
                 }
                 ManualKpiPlantAssignment out=find(c,id);c.commit();return out;
             }catch(RuntimeException|SQLException e){try{c.rollback();}catch(SQLException ignored){}if(e instanceof RuntimeException re)throw re;throw new IllegalStateException("Unable to assign Manual KPI plant scope",e);}
@@ -79,8 +79,8 @@ public final class JdbcManualKpiScopeAdministrationAdapter implements ManualKpiS
         validateIds(actor,user,plant);required(reason,"reason");
         try(Connection c=ds.getConnection()){
             c.setAutoCommit(false);try{
-                setAudit(c,actor,correlation);lock(c,user,plant);Long id=currentId(c,user,plant);if(id==null)throw new ManualKpiScopeConflictException("No current plant access exists for target user and plant");
-                try(PreparedStatement p=c.prepareStatement("UPDATE app_security.user_plant_access SET valid_to=CURRENT_TIMESTAMP,reason=? WHERE user_plant_access_id=?")){p.setString(1,required(reason,"reason"));p.setLong(2,id);p.executeUpdate();}
+                setAudit(c,actor,correlation);lock(c,user,plant);Long id=currentId(c,user,plant);if(id==null)throw new ManualKpiScopeConflictException("No current KPI Manuales plant assignment exists for target user and plant");
+                try(PreparedStatement p=c.prepareStatement("UPDATE app_security.user_plant_access SET valid_to=CURRENT_TIMESTAMP,reason=? WHERE user_plant_access_id=?")){p.setString(1,moduleReason(required(reason,"reason")));p.setLong(2,id);p.executeUpdate();}
                 ManualKpiPlantAssignment out=find(c,id);c.commit();return out;
             }catch(RuntimeException|SQLException e){try{c.rollback();}catch(SQLException ignored){}if(e instanceof RuntimeException re)throw re;throw new IllegalStateException("Unable to revoke Manual KPI plant scope",e);}
         }catch(SQLException e){throw new IllegalStateException("Unable to revoke Manual KPI plant scope",e);}
@@ -100,7 +100,7 @@ public final class JdbcManualKpiScopeAdministrationAdapter implements ManualKpiS
         try(PreparedStatement p=c.prepareStatement(q)){p.setLong(1,user);p.setString(2,roleCode);p.setString(3,entryCapability);p.setLong(4,plant);try(ResultSet r=p.executeQuery()){r.next();if(!r.getBoolean(1))throw new ManualKpiScopeConflictException("Target user must have the current canonical role "+roleCode+" with capability "+entryCapability+" before plant scope can be granted");}}
     }
     private void ensurePlantActive(Connection c,long plant)throws SQLException{try(PreparedStatement p=c.prepareStatement("SELECT is_active FROM core.plant WHERE plant_id=?")){p.setLong(1,plant);try(ResultSet r=p.executeQuery()){if(!r.next())throw new IllegalArgumentException("Plant not found");if(!r.getBoolean(1))throw new IllegalArgumentException("Plant is inactive");}}}
-    private Long currentId(Connection c,long user,long plant)throws SQLException{try(PreparedStatement p=c.prepareStatement("SELECT user_plant_access_id FROM app_security.user_plant_access WHERE user_id=? AND plant_id=? AND valid_from<=CURRENT_TIMESTAMP AND (valid_to IS NULL OR valid_to>CURRENT_TIMESTAMP) ORDER BY valid_from DESC,user_plant_access_id DESC")){p.setLong(1,user);p.setLong(2,plant);try(ResultSet r=p.executeQuery()){if(!r.next())return null;long id=r.getLong(1);if(r.next())throw new IllegalStateException("Multiple current user_plant_access rows exist for the same user and plant");return id;}}}
+    private Long currentId(Connection c,long user,long plant)throws SQLException{try(PreparedStatement p=c.prepareStatement("SELECT user_plant_access_id FROM app_security.user_plant_access WHERE user_id=? AND plant_id=? AND reason LIKE 'KPI_MANUALES:%' AND valid_from<=CURRENT_TIMESTAMP AND (valid_to IS NULL OR valid_to>CURRENT_TIMESTAMP) ORDER BY valid_from DESC,user_plant_access_id DESC")){p.setLong(1,user);p.setLong(2,plant);try(ResultSet r=p.executeQuery()){if(!r.next())return null;long id=r.getLong(1);if(r.next())throw new IllegalStateException("Multiple current user_plant_access rows exist for the same user and plant");return id;}}}
     private ManualKpiPlantAssignment find(Connection c,long id)throws SQLException{
         String q="""
             SELECT upa.user_plant_access_id assignment_id,upa.user_id,upa.plant_id,upa.valid_from,upa.valid_to,upa.granted_by_user_id,upa.reason,
@@ -114,7 +114,7 @@ public final class JdbcManualKpiScopeAdministrationAdapter implements ManualKpiS
                                 AND (ura.plant_id IS NULL OR ura.plant_id=upa.plant_id)
                                 AND rc.valid_from<=CURRENT_TIMESTAMP AND (rc.valid_to IS NULL OR rc.valid_to>CURRENT_TIMESTAMP))) effective
               FROM app_security.user_plant_access upa JOIN app_security.user_identity u ON u.user_id=upa.user_id
-             WHERE upa.user_plant_access_id=?
+             WHERE upa.user_plant_access_id=? AND upa.reason LIKE 'KPI_MANUALES:%'
             """;
         try(PreparedStatement p=c.prepareStatement(q)){p.setString(1,roleCode);p.setString(2,entryCapability);p.setLong(3,id);try(ResultSet r=p.executeQuery()){if(!r.next())throw new IllegalStateException("Manual KPI plant assignment disappeared after write");return map(r);}}
     }
@@ -125,6 +125,7 @@ public final class JdbcManualKpiScopeAdministrationAdapter implements ManualKpiS
     private void lock(Connection c,long u,long p)throws SQLException{try(PreparedStatement x=c.prepareStatement("SELECT pg_advisory_xact_lock(hashtextextended(?,0))")){x.setString(1,"manual-kpi-scope:"+u+":"+p);x.execute();}}
     private boolean exists(String q,Binder b){try(Connection c=ds.getConnection();PreparedStatement p=c.prepareStatement(q)){b.bind(p);try(ResultSet r=p.executeQuery()){return r.next()&&r.getBoolean(1);}}catch(SQLException e){throw new IllegalStateException("Unable to resolve Manual KPI scope administration configuration",e);}}
     private static void validateIds(long a,long u,long p){if(a<=0||u<=0||p<=0)throw new IllegalArgumentException("Positive actorUserId, targetUserId and plantId are required");}
+    private static String moduleReason(String value){return "KPI_MANUALES:"+(normalize(value)==null?"":normalize(value));}
     private static String normalize(String v){return v==null||v.isBlank()?null:v.trim();}
     private static String required(String v,String f){if(v==null||v.isBlank())throw new IllegalArgumentException(f+" is required");return v.trim();}
     @FunctionalInterface private interface Binder{void bind(PreparedStatement p)throws SQLException;}

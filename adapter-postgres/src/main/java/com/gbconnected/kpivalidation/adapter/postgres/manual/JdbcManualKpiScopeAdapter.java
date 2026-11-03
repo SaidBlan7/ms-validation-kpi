@@ -16,7 +16,7 @@ public final class JdbcManualKpiScopeAdapter implements ManualKpiScopePort {
             SELECT p.plant_id,p.plant_code,p.plant_name,p.timezone_name,
                    l.line_id,l.line_code,l.line_name
               FROM app_security.user_identity u
-              JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id
+              JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id AND upa.reason LIKE 'KPI_MANUALES:%'
               JOIN core.plant p ON p.plant_id=upa.plant_id AND p.is_active=TRUE
               JOIN app_security.user_line_access ula ON ula.user_id=u.user_id
               JOIN core.line l ON l.line_id=ula.line_id AND l.is_active=TRUE
@@ -56,7 +56,7 @@ public final class JdbcManualKpiScopeAdapter implements ManualKpiScopePort {
             }
         } catch(SQLException e){throw new IllegalStateException("Unable to resolve Manual KPI effective scope",e);}
     }
-    @Override public String source(){return "app_security.user_plant_access+user_line_access+configuration.configuration_assignment";}
+    @Override public String source(){return "app_security.user_plant_access[KPI_MANUALES]+user_line_access+configuration.configuration_assignment";}
     private static String get(ResultSet r,String c){try{return r.getString(c);}catch(SQLException e){throw new IllegalStateException(e);}}
     private static final class PlantBuilder{final long id;final String code,name,timezone;final List<ManualKpiLineScope> lines=new ArrayList<>();PlantBuilder(long i,String c,String n,String t){id=i;code=c;name=n;timezone=t;}}
 }
