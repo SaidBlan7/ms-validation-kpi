@@ -774,7 +774,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         PlantContext plant = context.findPlant(command.plantId()).orElseThrow(() -> new IllegalStateException("Plant not found"));
         ZoneId zone = ZoneId.of(plant.timezoneName());
         Instant now = clock.instant();
-        Instant expiresAt = ZonedDateTime.now(clock.withZone(zone)).toLocalDate().plusDays(1)
+        requireStillEligibleForSubmission(actor, command.plantId(), command.lineId(), command.businessDate(), now);
+        Instant expiresAt = now.atZone(zone).toLocalDate().plusDays(1)
                 .atStartOfDay(zone).minusSeconds(1).toInstant();
         if (expiresAt.isBefore(now)) expiresAt = now;
         CorrectionJustificationView j = pre.justification();
@@ -878,7 +879,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 .orElseThrow(() -> new IllegalStateException("Plant not found"));
         ZoneId zone = ZoneId.of(plant.timezoneName());
         Instant now = clock.instant();
-        Instant expiresAt = ZonedDateTime.now(clock.withZone(zone)).toLocalDate().plusDays(1)
+        requireStillEligibleForSubmission(actor, command.plantId(), command.lineId(), command.businessDate(), now);
+        Instant expiresAt = now.atZone(zone).toLocalDate().plusDays(1)
                 .atStartOfDay(zone).minusSeconds(1).toInstant();
         if (expiresAt.isBefore(now)) expiresAt = now;
         CorrectionJustificationView j = pre.justification();
@@ -942,7 +944,8 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         PlantContext plant = context.findPlant(command.plantId()).orElseThrow(() -> new IllegalStateException("Plant not found"));
         ZoneId zone = ZoneId.of(plant.timezoneName());
         Instant now = clock.instant();
-        Instant expiresAt = ZonedDateTime.now(clock.withZone(zone)).toLocalDate().plusDays(1).atStartOfDay(zone).minusSeconds(1).toInstant();
+        requireStillEligibleForSubmission(actor, command.plantId(), command.lineId(), command.businessDate(), now);
+        Instant expiresAt = now.atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).minusSeconds(1).toInstant();
         if (expiresAt.isBefore(now)) expiresAt = now;
         CorrectionJustificationView j = pre.justification();
         ValidationPersistenceRequest request = new ValidationPersistenceRequest(
@@ -980,6 +983,23 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
             throw new AuthorizationException("Validation line is outside the authorized plant");
         }
         return result;
+    }
+
+    /**
+     * Re-check the plant-local calendar at the final submission boundary. Prevalidation
+     * can begin before midnight and finish afterwards; a stale date must not be
+     * persisted. Use one captured instant for this check and the expiry calculation.
+     */
+    private void requireStillEligibleForSubmission(ActorContext actor, long plantId, long lineId,
+            LocalDate businessDate, Instant evaluatedAt) {
+        EligibilityResult eligibility = check(actor, plantId, lineId, businessDate);
+        if (!eligibility.eligible()) {
+            throw new DomainValidationException("KPI validation date or authorization is no longer eligible; refresh temporal context");
+        }
+        ZoneId zone = ZoneId.of(eligibility.plantTimezone());
+        if (!businessDate.equals(evaluatedAt.atZone(zone).toLocalDate().minusDays(1))) {
+            throw new DomainValidationException("KPI validation date expired while submitting; refresh temporal context");
+        }
     }
 
     private static long parseKpiResultId(String sourceRecordKey) {
