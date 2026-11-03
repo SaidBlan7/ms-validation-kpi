@@ -30,6 +30,7 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
     private static final String SNAPSHOT_SCHEMA_V1 = "MANUAL_KPI_V1";
     private static final String SNAPSHOT_SCHEMA_V2 = "MANUAL_KPI_V2";
     private static final String KG_UOM_CODE = "KG";
+    private static final String PRODUCED_TONNES_UOM_CODE = "TONNE";
     private static final BigDecimal SECONDS_PER_HOUR = new BigDecimal("3600");
     // DECIMAL128 cannot express 1/3600 exactly; allow only its tiny round-trip error.
     private static final BigDecimal SECONDS_ROUNDTRIP_TOLERANCE = new BigDecimal("0.00000000000000000001");
@@ -417,7 +418,12 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
 
         JsonObject waste = new JsonObject(); JsonArray entries = new JsonArray();
         for (ManualWasteInput w : r.waste().waste()) { JsonObject x = new JsonObject(); x.addProperty("wasteClassificationId", w.wasteClassificationId()); x.addProperty("wasteSubclassificationId", w.wasteSubclassificationId()); addDecimal(x, "kilograms", w.kilograms()); entries.add(x); }
-        waste.add("waste", entries); addDecimal(waste, "producedTonnes", r.waste().producedTonnes()); root.add("waste", waste);
+        waste.add("waste", entries);
+        addDecimal(waste, "producedTonnes", r.waste().producedTonnes());
+        // The canonical result snapshot stores produced tonnes separately from waste kg facts.
+        // Persist the unit explicitly so downstream reporting cannot mistake tonnes for kg.
+        waste.addProperty("producedTonnesUnit", PRODUCED_TONNES_UOM_CODE);
+        root.add("waste", waste);
 
         JsonArray audit = new JsonArray();
         for (ManualKpiAuditEvent e : r.auditEvents()) {
@@ -464,6 +470,14 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
         if (o == null) return new ManualWasteSection(List.of(), null);
         List<ManualWasteInput> entries = new ArrayList<>(); JsonArray a=o.getAsJsonArray("waste");
         if(a!=null) for(JsonElement e:a){JsonObject x=e.getAsJsonObject();entries.add(new ManualWasteInput(x.get("wasteClassificationId").getAsLong(),x.get("wasteSubclassificationId").getAsLong(),decimal(x,"kilograms")));}
+        JsonElement tonneUnit = o.get("producedTonnesUnit");
+        // Legacy MANUAL_KPI_V1/V2 snapshots omitted this metadata. They were already tonnes,
+        // so remain readable; reject any *explicit* incompatible unit rather than misreporting it.
+        if (tonneUnit != null && !tonneUnit.isJsonNull()
+                && (!tonneUnit.isJsonPrimitive() || !tonneUnit.getAsJsonPrimitive().isString()
+                    || !PRODUCED_TONNES_UOM_CODE.equals(tonneUnit.getAsString()))) {
+            throw new IllegalStateException("Invalid producedTonnesUnit in Manual KPI source snapshot: expected TONNE");
+        }
         return new ManualWasteSection(entries, decimal(o,"producedTonnes"));
     }
 
