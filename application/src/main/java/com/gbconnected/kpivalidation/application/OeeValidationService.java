@@ -803,6 +803,14 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
         if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
             throw new AuthorizationException("Actor is not authorized to read this mass-performance validation");
         }
+        // The KPI-specific assignment does not replace the general plant/line access scope.
+        // Apply the same object-level checks as OEE and stop-time detail reads.
+        if (!accessScope.hasPlantAccess(actor.tenantId(), actor.objectId(), result.plantId())) {
+            throw new AuthorizationException("Actor is not authorized for the validation plant scope");
+        }
+        if (result.lineId() != null && !context.lineBelongsToPlant(result.lineId(), result.plantId())) {
+            throw new AuthorizationException("Validation line is outside the authorized plant");
+        }
         return new MassPerformanceValidationResult(result.validationId(), result.status(), result.plantId(), result.lineId(),
                 result.businessDate(), result.uomId(), result.variable(), result.originalValue(), result.proposedValue(),
                 result.sourceAggregateKey(), result.sourceType(), result.reasonType(), result.justification(),

@@ -19,7 +19,12 @@ class OeeValidationServiceTest {
     }
 
     private OeeValidationService service(boolean specificallyAssigned, Clock clock) {
-        AccessScopePort access = (tenant, object, plant) -> plant == 1;
+        return service(specificallyAssigned, clock, (tenant, object, plant) -> plant == 1,
+                ValidationPersistencePort.unavailable());
+    }
+
+    private OeeValidationService service(boolean specificallyAssigned, Clock clock,
+            AccessScopePort access, ValidationPersistencePort persistence) {
         OperationalContextPort context = new OperationalContextPort() {
             public Optional<PlantContext> findPlant(long plant) {
                 return plant == 1 ? Optional.of(new PlantContext(1, ZONE, true)) : Optional.empty();
@@ -73,11 +78,62 @@ class OeeValidationServiceTest {
             public String source() { return "CANONICAL_KPI_RESULT_V1_2"; }
         };
         return new OeeValidationService(access, context, assignments, stopTimes, masses, oeeMetrics,
+                ActorIdentityPort.unavailable(), persistence,
+                FeatureActivationPort.enabledByDefault("KPI_OEE_VALIDATION_ENABLED"),
+                ValidatorAssignmentAdministrationPort.unavailable(),
+                com.gbconnected.kpivalidation.domain.CorrectionReasonPolicy.unbounded(),
                 new PreviousLocalCalendarDayPolicy(), clock, "GB.KPI.Validator");
     }
 
     private ActorContext actor() {
         return new ActorContext(T, O, Set.of("GB.KPI.Validator"));
+    }
+
+
+    @Test
+    void spec07MassDetailRejectsUsersWithoutGeneralPlantAccess() {
+        var persistence = massDetailPersistence(10L);
+        var clock = Clock.fixed(Instant.parse("2026-10-09T18:00:00Z"), ZoneOffset.UTC);
+        var noGeneralAccess = service(true, clock, (tenant, object, plant) -> false, persistence);
+        assertThrows(AuthorizationException.class,
+                () -> noGeneralAccess.getMassPerformanceValidation(actor(), 12L));
+    }
+
+    @Test
+    void spec07MassDetailRejectsLineOutsideValidationPlant() {
+        var clock = Clock.fixed(Instant.parse("2026-10-09T18:00:00Z"), ZoneOffset.UTC);
+        var invalidLine = service(true, clock, (tenant, object, plant) -> plant == 1,
+                massDetailPersistence(11L));
+        assertThrows(AuthorizationException.class,
+                () -> invalidLine.getMassPerformanceValidation(actor(), 12L));
+    }
+
+    @Test
+    void spec07MassDetailPreservesAuditForAuthorizedPlantAndLine() {
+        var clock = Clock.fixed(Instant.parse("2026-10-09T18:00:00Z"), ZoneOffset.UTC);
+        var authorized = service(true, clock, (tenant, object, plant) -> plant == 1,
+                massDetailPersistence(10L));
+        var result = authorized.getMassPerformanceValidation(actor(), 12L);
+        assertEquals(77L, result.proposedByUserId());
+        assertEquals(Instant.parse("2026-10-09T17:30:00Z"), result.proposedAt());
+    }
+
+    private ValidationPersistencePort massDetailPersistence(long lineId) {
+        var result = new MassPerformanceValidationResult(12L, "PENDING", 1L, lineId,
+                LocalDate.of(2026, 10, 8), 10L,
+                com.gbconnected.kpivalidation.domain.MassPerformanceVariable.ELABORATED_MASS,
+                new BigDecimal("1250.5"), new BigDecimal("1251.0"), null, "SCHEDULING",
+                ValidationReasonType.SYSTEM, null, null, null, "INC-07", 77L,
+                Instant.parse("2026-10-09T17:30:00Z"), Instant.parse("2026-10-10T05:59:59Z"),
+                null, null, null, List.of());
+        return (ValidationPersistencePort) java.lang.reflect.Proxy.newProxyInstance(
+                ValidationPersistencePort.class.getClassLoader(),
+                new Class<?>[] { ValidationPersistencePort.class },
+                (proxy, method, arguments) -> {
+                    if ("findMassPerformanceById".equals(method.getName())) return Optional.of(result);
+                    if ("available".equals(method.getName())) return true;
+                    throw new UnsupportedOperationException("Unexpected persistence call: " + method.getName());
+                });
     }
 
     @Test
