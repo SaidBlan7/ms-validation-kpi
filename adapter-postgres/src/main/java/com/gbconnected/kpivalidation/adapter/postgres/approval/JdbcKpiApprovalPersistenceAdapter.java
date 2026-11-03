@@ -51,7 +51,7 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
    SELECT v.kpi_validation_id,v.plant_id,p.plant_code,p.plant_name,v.line_id,l.line_code,l.line_name,v.oee_date,v.status_code,v.reason_type,v.justification,v.cause,v.action_plan,v.incident_reference,
           v.proposed_by_user_id,pu.display_name AS proposed_by_display_name,v.proposed_at,v.expires_at,
           v.approved_by_user_id,du.display_name AS decided_by_display_name,v.approved_at,
-          d.kpi_result_id,kd.kpi_code,kd.kpi_name,
+          d.kpi_validation_detail_id,d.kpi_result_id,kd.kpi_code,kd.kpi_name,
           d.stop_classification_id,sc.classification_code AS stop_classification_code,sc.classification_name AS stop_classification_name,sc.oee_stop_type_code,
           d.metric_definition_id,md.metric_code,md.metric_name,md.source_domain AS metric_source_domain,
           d.original_value,d.proposed_value,d.uom_id,u.uom_code,u.uom_name
@@ -75,7 +75,9 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
    try(ResultSet r=p.executeQuery()){while(r.next()){
     long vid=r.getLong("kpi_validation_id");Builder x=b.computeIfAbsent(vid,k->new Builder(r));
     Long kr=objLong(r,"kpi_result_id"),sc=objLong(r,"stop_classification_id"),md=objLong(r,"metric_definition_id");
-    if(kr!=null||sc!=null||md!=null){
+    // A detail is a canonical value change even when its optional reference FKs are null.
+    // Dropping such rows hides the before/after evidence from the approver.
+    if(objLong(r,"kpi_validation_detail_id")!=null){
      x.changes.add(new ApprovalValueChangeView(
              kr,r.getString("kpi_code"),r.getString("kpi_name"),
              sc,r.getString("stop_classification_code"),r.getString("stop_classification_name"),r.getString("oee_stop_type_code"),
