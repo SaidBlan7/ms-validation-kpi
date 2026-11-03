@@ -8,13 +8,42 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
  public List<ApprovalValidationView> all(){return query(null,false);}
  public Optional<ApprovalValidationView> find(long id){List<ApprovalValidationView>x=query(id,false);return x.stream().findFirst();}
  public void expirePending(Instant now,String correlationId){
-  String sql="UPDATE kpi.kpi_validation SET status_code='EXPIRED' WHERE status_code='PENDING' AND expires_at < ?";
-  try(Connection c=ds.getConnection()){boolean ac=c.getAutoCommit();c.setAutoCommit(false);auditContext(c,null,correlationId);try(PreparedStatement p=c.prepareStatement(sql)){p.setObject(1,OffsetDateTime.ofInstant(now,ZoneOffset.UTC));p.executeUpdate();}c.commit();c.setAutoCommit(ac);}catch(SQLException e){throw new IllegalStateException("Unable to expire KPI validations",e);}
+  String sql="UPDATE kpi.kpi_validation SET status_code='EXPIRED' WHERE status_code='PENDING' AND expires_at < clock_timestamp()";
+  try(Connection c=ds.getConnection()){boolean ac=c.getAutoCommit();c.setAutoCommit(false);auditContext(c,null,correlationId);try(PreparedStatement p=c.prepareStatement(sql)){p.executeUpdate();}c.commit();c.setAutoCommit(ac);}catch(SQLException e){throw new IllegalStateException("Unable to expire KPI validations",e);}
  }
  public ApprovalValidationView decide(long id,long userId,ApprovalDecision decision,Instant at,String correlationId){
-  String sql="UPDATE kpi.kpi_validation SET status_code=?,approved_by_user_id=?,approved_at=? WHERE kpi_validation_id=? AND status_code='PENDING' AND expires_at>=?";
-  try(Connection c=ds.getConnection()){boolean ac=c.getAutoCommit();c.setAutoCommit(false);auditContext(c,userId,correlationId);int n;try(PreparedStatement p=c.prepareStatement(sql)){p.setString(1,decision.name());p.setLong(2,userId);p.setObject(3,OffsetDateTime.ofInstant(at,ZoneOffset.UTC));p.setLong(4,id);p.setObject(5,OffsetDateTime.ofInstant(at,ZoneOffset.UTC));n=p.executeUpdate();}if(n!=1){c.rollback();throw new ApprovalConflictException("Validation was already decided or expired");}c.commit();c.setAutoCommit(ac);return find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found after decision"));}
-  catch(ApprovalConflictException e){throw e;}catch(SQLException e){throw new IllegalStateException("Unable to decide KPI validation",e);}
+  // Lock the row first, then obtain a single authoritative timestamp from PostgreSQL.
+  // A request waiting for another approver must not reuse a pre-lock Java timestamp.
+  String sql="""
+      WITH locked AS MATERIALIZED (
+        SELECT kpi_validation_id, expires_at
+          FROM kpi.kpi_validation
+         WHERE kpi_validation_id=? AND status_code='PENDING'
+         FOR UPDATE
+      ), decision_time AS MATERIALIZED (
+        SELECT clock_timestamp() AS decided_at FROM locked
+      )
+      UPDATE kpi.kpi_validation v
+         SET status_code=?, approved_by_user_id=?, approved_at=t.decided_at
+        FROM locked l, decision_time t
+       WHERE v.kpi_validation_id=l.kpi_validation_id
+         AND t.decided_at<=l.expires_at
+      """;
+  try(Connection c=ds.getConnection()){
+   boolean ac=c.getAutoCommit();c.setAutoCommit(false);
+   try {
+    auditContext(c,userId,correlationId);
+    int n;
+    try(PreparedStatement p=c.prepareStatement(sql)){
+     p.setLong(1,id);p.setString(2,decision.name());p.setLong(3,userId);
+     n=p.executeUpdate();
+    }
+    if(n!=1){c.rollback();throw new ApprovalConflictException("Validation was already decided or expired");}
+    c.commit();
+   } catch(SQLException|RuntimeException e){try{c.rollback();}catch(SQLException rollback){e.addSuppressed(rollback);}throw e;}
+   finally {c.setAutoCommit(ac);}
+   return find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found after decision"));
+  }catch(ApprovalConflictException e){throw e;}catch(SQLException e){throw new IllegalStateException("Unable to decide KPI validation",e);}
  }
  public boolean supportsWasteValidations(){return true;}
  private List<ApprovalValidationView> query(Long id,boolean pendingOnly){
