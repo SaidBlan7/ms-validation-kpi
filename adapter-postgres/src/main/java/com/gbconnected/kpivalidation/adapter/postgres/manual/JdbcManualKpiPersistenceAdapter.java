@@ -74,11 +74,15 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
                 // Recheck against the database clock AFTER acquiring the business-key lock.
                 // A request that waited for another writer may have crossed the 96-hour boundary.
                 requireCaptureDateEligible(c, command.businessDate(), timezone);
-                ManualKpiAuditEvent createEvent = new ManualKpiAuditEvent(1, "CREATE", actorUserId, createdAt, correlationId, "SUCCESS");
+                // Use the authoritative database instant after waiting for the business-key lock.
+                // The first-save instant, audit event and edit deadline must all share one clock.
+                Instant persistedAt = databaseInstant(c);
+                Instant persistedEditableUntil = persistedAt.plus(Duration.ofHours(8));
+                ManualKpiAuditEvent createEvent = new ManualKpiAuditEvent(1, "CREATE", actorUserId, persistedAt, correlationId, "SUCCESS");
                 ManualKpiRecord provisional = new ManualKpiRecord(0L, 1L, command.plantId(), command.lineId(), command.businessDate(),
-                        timezone, normalizeOee(command.oee()), normalizeWaste(command.waste()), actorUserId, createdAt,
-                        actorUserId, createdAt, editableUntil, SOURCE_MODE, correlationId, List.of(createEvent));
-                SourceFactRefs sourceFacts = synchronizeSourceFacts(c, provisional, actorUserId, createdAt);
+                        timezone, normalizeOee(command.oee()), normalizeWaste(command.waste()), actorUserId, persistedAt,
+                        actorUserId, persistedAt, persistedEditableUntil, SOURCE_MODE, correlationId, List.of(createEvent));
+                SourceFactRefs sourceFacts = synchronizeSourceFacts(c, provisional, actorUserId, persistedAt);
                 long rowId = insertVersion(c, resolveCaptureDefinition(c), provisional, sourceFacts);
                 ManualKpiRecord created = copyWithRecordId(provisional, rowId);
                 updateSnapshot(c, rowId, created, sourceFacts);
@@ -113,15 +117,17 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
                 }
                 // Check the actual database time after acquiring the business-key lock. A request
                 // started before expiry must not complete an update after the eight-hour boundary.
-                requireEditWindowOpen(c, current.createdAt());
+                // Compare expiry and write the audit event using the exact same DB instant.
+                Instant persistedAt = databaseInstant(c);
+                requireEditWindowOpen(current.createdAt(), persistedAt);
                 long nextVersion = current.version() + 1L;
                 List<ManualKpiAuditEvent> events = new ArrayList<>(current.auditEvents());
-                events.add(new ManualKpiAuditEvent(nextVersion, "UPDATE", actorUserId, updatedAt, correlationId, "SUCCESS"));
+                events.add(new ManualKpiAuditEvent(nextVersion, "UPDATE", actorUserId, persistedAt, correlationId, "SUCCESS"));
                 ManualKpiRecord updated = new ManualKpiRecord(current.recordId(), nextVersion, current.plantId(), current.lineId(),
                         current.businessDate(), current.plantTimezone(), normalizeOee(command.oee()), normalizeWaste(command.waste()),
-                        current.createdByUserId(), current.createdAt(), actorUserId, updatedAt, current.editableUntil(), SOURCE_MODE,
+                        current.createdByUserId(), current.createdAt(), actorUserId, persistedAt, current.editableUntil(), SOURCE_MODE,
                         correlationId, List.copyOf(events));
-                SourceFactRefs sourceFacts = synchronizeSourceFacts(c, updated, actorUserId, updatedAt);
+                SourceFactRefs sourceFacts = synchronizeSourceFacts(c, updated, actorUserId, persistedAt);
                 insertVersion(c, resolveCaptureDefinition(c), updated, sourceFacts);
                 c.commit();
                 return updated;
@@ -376,15 +382,19 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
         if (!selection.selectable()) throw new DomainValidationException(selection.message());
     }
 
-    private void requireEditWindowOpen(Connection c, Instant createdAt) throws SQLException {
-        String sql = "SELECT clock_timestamp() < CAST(? AS timestamptz) + INTERVAL '8 hours'";
-        try (PreparedStatement p = c.prepareStatement(sql)) {
-            p.setObject(1, OffsetDateTime.ofInstant(createdAt, ZoneOffset.UTC));
+    private Instant databaseInstant(Connection c) throws SQLException {
+        try (PreparedStatement p = c.prepareStatement("SELECT clock_timestamp()")) {
             try (ResultSet r = p.executeQuery()) {
-                if (!r.next() || !r.getBoolean(1)) {
-                    throw new DomainValidationException("Manual KPI record is locked because the 8-hour edit window expired");
-                }
+                if (!r.next()) throw new SQLException("PostgreSQL did not return its current timestamp");
+                return r.getObject(1, OffsetDateTime.class).toInstant();
             }
+        }
+    }
+
+    private void requireEditWindowOpen(Instant createdAt, Instant databaseNow) {
+        // Exclusive upper bound: an update at exactly +8 hours is not allowed.
+        if (!databaseNow.isBefore(createdAt.plus(Duration.ofHours(8)))) {
+            throw new DomainValidationException("Manual KPI record is locked because the 8-hour edit window expired");
         }
     }
 
