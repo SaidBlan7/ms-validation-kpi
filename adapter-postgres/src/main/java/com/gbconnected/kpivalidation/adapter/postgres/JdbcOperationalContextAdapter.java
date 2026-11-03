@@ -32,6 +32,9 @@ public final class JdbcOperationalContextAdapter implements AccessScopePort, Ope
                        AND u.entra_object_id = ?
                        AND u.is_active = TRUE
                        AND a.plant_id = ?
+                       AND COALESCE(a.reason,'') NOT LIKE 'KPI_MANUALES:%'
+                       AND COALESCE(a.reason,'') NOT LIKE 'KPI_APROBACION:%'
+                       AND COALESCE(a.reason,'') NOT LIKE 'KPI_OEE_VALIDATION_SCOPE %'
                        AND a.valid_from <= CURRENT_TIMESTAMP
                        AND (a.valid_to IS NULL OR a.valid_to > CURRENT_TIMESTAMP)
                 )

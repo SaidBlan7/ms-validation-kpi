@@ -56,7 +56,7 @@ public final class JdbcValidatorAssignmentAdministrationAdapter implements Valid
     private ValidatorAssignmentChangeResult write(String action,long actor,long target,long plant,String approval,String reason,String correlation,boolean existingRequired,boolean revoke){
         if(actor<=0||target<=0||plant<=0)throw new IllegalArgumentException("Positive actorUserId, targetUserId and plantId are required");
         try(Connection c=dataSource.getConnection()){c.setAutoCommit(false);try{
-            setAudit(c,actor,correlation);lock(c,plant);ensurePlantActive(c,plant);ensureTargetRole(c,target,plant);Long id=currentId(c,target,plant);
+            setAudit(c,actor,correlation);lock(c,plant);ensurePlantActive(c,plant);ensureTargetRole(c,target,plant);CanonicalPlantAccess.requireGeneralGrant(c,target,plant);Long id=currentId(c,target,plant);
             if(!existingRequired&&id!=null)throw new ValidatorAssignmentConflictException("Target user already has current plant access and is already an effective KPI OEE validator for this plant");
             if(existingRequired&&id==null)throw new ValidatorAssignmentConflictException("No current plant access exists for the target validator and plant");
             Instant now=Instant.now();long changed;
@@ -81,7 +81,14 @@ public final class JdbcValidatorAssignmentAdministrationAdapter implements Valid
         SELECT COUNT(DISTINCT u.user_id) FROM app_security.user_identity u JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id
         JOIN app_security.user_role_assignment ura ON ura.user_id=u.user_id JOIN app_security.role r ON r.role_id=ura.role_id
         JOIN app_security.role_capability rc ON rc.role_id=r.role_id JOIN app_security.capability cap ON cap.capability_id=rc.capability_id
-        WHERE u.is_active=TRUE AND upa.plant_id=? AND starts_with(upa.reason, 'KPI_OEE_VALIDATION_SCOPE | externalApprovalReference=') AND upa.valid_from<=CURRENT_TIMESTAMP AND (upa.valid_to IS NULL OR upa.valid_to>CURRENT_TIMESTAMP)
+        WHERE u.is_active=TRUE AND upa.plant_id=? AND starts_with(upa.reason, 'KPI_OEE_VALIDATION_SCOPE | externalApprovalReference=')
+        AND EXISTS (SELECT 1 FROM app_security.user_plant_access gp
+              WHERE gp.user_id=u.user_id AND gp.plant_id=upa.plant_id
+                AND gp.valid_from<=CURRENT_TIMESTAMP AND (gp.valid_to IS NULL OR gp.valid_to>CURRENT_TIMESTAMP)
+                AND COALESCE(gp.reason,'') NOT LIKE 'KPI_MANUALES:%'
+                AND COALESCE(gp.reason,'') NOT LIKE 'KPI_APROBACION:%'
+                AND COALESCE(gp.reason,'') NOT LIKE 'KPI_OEE_VALIDATION_SCOPE %')
+        AND upa.valid_from<=CURRENT_TIMESTAMP AND (upa.valid_to IS NULL OR upa.valid_to>CURRENT_TIMESTAMP)
           AND ura.valid_from<=CURRENT_TIMESTAMP AND (ura.valid_to IS NULL OR ura.valid_to>CURRENT_TIMESTAMP) AND (ura.plant_id IS NULL OR ura.plant_id=upa.plant_id)
           AND r.role_code=? AND r.is_active=TRUE AND cap.capability_code=? AND cap.is_active=TRUE AND rc.valid_from<=CURRENT_TIMESTAMP AND (rc.valid_to IS NULL OR rc.valid_to>CURRENT_TIMESTAMP)""";
         try(PreparedStatement p=c.prepareStatement(q)){p.setLong(1,plant);p.setString(2,validatorRoleCode);p.setString(3,validatorCapabilityCode);try(ResultSet r=p.executeQuery()){r.next();return r.getInt(1);}}

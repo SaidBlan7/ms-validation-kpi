@@ -66,7 +66,7 @@ public final class JdbcManualKpiScopeAdministrationAdapter implements ManualKpiS
         validateIds(actor,user,plant);
         try(Connection c=ds.getConnection()){
             c.setAutoCommit(false);try{
-                setAudit(c,actor,correlation);lock(c,user,plant);ensurePlantActive(c,plant);ensureTargetRole(c,user,plant);
+                setAudit(c,actor,correlation);lock(c,user,plant);ensurePlantActive(c,plant);ensureTargetRole(c,user,plant);com.gbconnected.kpivalidation.adapter.postgres.CanonicalPlantAccess.requireGeneralGrant(c,user,plant);
                 if(currentId(c,user,plant)!=null)throw new ManualKpiScopeConflictException("Target user already has a current KPI Manuales plant assignment");
                 long id;try(PreparedStatement p=c.prepareStatement("INSERT INTO app_security.user_plant_access(user_id,plant_id,valid_from,granted_by_user_id,reason) VALUES(?,?,CURRENT_TIMESTAMP,?,?) RETURNING user_plant_access_id")){
                     p.setLong(1,user);p.setLong(2,plant);p.setLong(3,actor);p.setString(4,moduleReason(reason));try(ResultSet r=p.executeQuery()){r.next();id=r.getLong(1);}

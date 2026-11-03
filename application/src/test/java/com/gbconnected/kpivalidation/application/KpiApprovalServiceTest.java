@@ -13,7 +13,7 @@ class KpiApprovalServiceTest {
     private static final ActorContext ACTOR = new ActorContext(TENANT, OBJECT, Set.of("KPI_APPROVER"));
     private static final Instant NOW = Instant.parse("2026-11-03T21:00:00Z");
 
-    private static final class Store implements KpiApprovalPersistencePort {
+    private static class Store implements KpiApprovalPersistencePort {
         ApprovalValidationView view;
         int decisions;
         Store(long proposer, String state) { view = sample(proposer,state); }
@@ -74,7 +74,7 @@ class KpiApprovalServiceTest {
         Store db=new Store(19,"PENDING");
         db.view=new ApprovalValidationView(31,"OEE","KPI_RESULT","PENDING",9,"P9","Planta",11L,"L11","Linea",
                 LocalDate.parse("2026-11-02"),"OPERATIVE",null,"cause","plan",null,19,"validador",NOW.minusSeconds(100),
-                NOW.minusSeconds(1),null,null,null,false,List.of());
+                NOW.minusSeconds(1),null,null,null,false,sample(19,"PENDING").changes());
         service(db,true,true).decide(ACTOR,31,ApprovalDecision.REJECTED,"test-5");
         assertEquals(1,db.decisions);
     }
@@ -119,4 +119,39 @@ class KpiApprovalServiceTest {
         assertThrows(ApprovalConflictException.class,()->service(db,true,true).decide(ACTOR,31,ApprovalDecision.APPROVED,"waste-foreign"));
         assertEquals(0,db.decisions);
     }
+    /** PostgreSQL must scope the rows before Application receives them; Memory keeps the fallback. */
+    @Test void approvalReadsDelegateToActorScopedPersistenceQueries() {
+        class ScopedStore extends Store {
+            int scopedLists, scopedPending, scopedDetails;
+            ScopedStore() { super(19,"PENDING"); }
+            @Override public List<ApprovalValidationView> all(){
+                fail("Unscoped all() must not be used for an approval list"); return List.of();
+            }
+            @Override public List<ApprovalValidationView> pending(){
+                fail("Unscoped pending() must not be used for pending approvals"); return List.of();
+            }
+            @Override public Optional<ApprovalValidationView> find(long id){
+                fail("Unscoped find() must not be used for detail or decision preflight"); return Optional.empty();
+            }
+            @Override public List<ApprovalValidationView> scopedAll(long user){
+                assertEquals(17L,user);scopedLists++;return List.of(view);
+            }
+            @Override public List<ApprovalValidationView> scopedPending(long user){
+                assertEquals(17L,user);scopedPending++;return List.of(view);
+            }
+            @Override public Optional<ApprovalValidationView> scopedFind(long id,long user){
+                assertEquals(17L,user);scopedDetails++;return Optional.of(view);
+            }
+        }
+        ScopedStore db=new ScopedStore();
+        var svc=service(db,true,true);
+        assertEquals(1,svc.pending(ACTOR).size());
+        assertEquals(1,svc.list(ACTOR,ApprovalValidationQuery.defaults()).total());
+        assertEquals(31L,svc.get(ACTOR,31).validationId());
+        svc.decide(ACTOR,31,ApprovalDecision.APPROVED,"scoped");
+        assertEquals(1,db.scopedPending);
+        assertEquals(1,db.scopedLists);
+        assertEquals(2,db.scopedDetails);
+    }
+
 }

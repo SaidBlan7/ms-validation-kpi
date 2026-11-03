@@ -15,6 +15,10 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
  public List<ApprovalValidationView> pending(){return query(null,true);}
  public List<ApprovalValidationView> all(){return query(null,false);}
  public Optional<ApprovalValidationView> find(long id){List<ApprovalValidationView>x=query(id,false);return x.stream().findFirst();}
+ public List<ApprovalValidationView> scopedAll(long userId){return query(null,false,userId);}
+ public List<ApprovalValidationView> scopedPending(long userId){return query(null,true,userId);}
+ public Optional<ApprovalValidationView> scopedFind(long id,long userId){return query(id,false,userId).stream().findFirst();}
+
  public void expirePending(Instant now,String correlationId){
   String sql="UPDATE kpi.kpi_validation SET status_code='EXPIRED' WHERE status_code='PENDING' AND expires_at < clock_timestamp()";
   try(Connection c=ds.getConnection()){boolean ac=c.getAutoCommit();c.setAutoCommit(false);auditContext(c,null,correlationId);try(PreparedStatement p=c.prepareStatement(sql)){p.executeUpdate();}c.commit();c.setAutoCommit(ac);}catch(SQLException e){throw new IllegalStateException("Unable to expire KPI validations",e);}
@@ -98,8 +102,15 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
         AND (ura.plant_id IS NULL OR ura.plant_id=v.plant_id)
         AND rc.valid_from<=clock_timestamp() AND (rc.valid_to IS NULL OR rc.valid_to>clock_timestamp())
         AND cap.capability_code=?
-      FOR SHARE OF u,upa,ura
+      FOR SHARE OF u,upa,ura,r,rc,cap
      """;
+  // Lock the independent organizational grant as well. Revocations cannot interleave the decision.
+  long plantId;
+  try (PreparedStatement ps=c.prepareStatement("SELECT plant_id FROM kpi.kpi_validation WHERE kpi_validation_id=?")) {
+   ps.setLong(1,validationId);
+   try (ResultSet r=ps.executeQuery()) { if (!r.next()) throw new ApprovalNotFoundException("KPI validation not found"); plantId=r.getLong(1); }
+  }
+  com.gbconnected.kpivalidation.adapter.postgres.CanonicalPlantAccess.requireGeneralGrant(c,userId,plantId);
   try(PreparedStatement p=c.prepareStatement(sql)){
    p.setLong(1,userId);p.setLong(2,validationId);p.setString(3,approverCapability);
    try(ResultSet x=p.executeQuery()){
@@ -145,7 +156,8 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
       "Waste validation has mixed or ambiguous metric details; decision blocked");
  }
  public boolean supportsWasteValidations(){return true;}
- private List<ApprovalValidationView> query(Long id,boolean pendingOnly){
+ private List<ApprovalValidationView> query(Long id,boolean pendingOnly){return query(id,pendingOnly,null);}
+ private List<ApprovalValidationView> query(Long id,boolean pendingOnly,Long scopedUser){
   StringBuilder sql=new StringBuilder("""
    SELECT v.kpi_validation_id,v.plant_id,p.plant_code,p.plant_name,v.line_id,l.line_code,l.line_name,v.oee_date,v.status_code,v.reason_type,v.justification,v.cause,v.action_plan,v.incident_reference,
           v.proposed_by_user_id,pu.display_name AS proposed_by_display_name,v.proposed_at,v.expires_at,
@@ -168,9 +180,35 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
     WHERE 1=1
    """);
   if(id!=null)sql.append(" AND v.kpi_validation_id=?"); if(pendingOnly)sql.append(" AND v.status_code='PENDING'");
+  if(scopedUser!=null)sql.append("""
+    AND EXISTS (
+      SELECT 1 FROM app_security.user_identity auth_user
+      JOIN app_security.user_plant_access module_grant
+        ON module_grant.user_id=auth_user.user_id AND module_grant.plant_id=v.plant_id
+      JOIN app_security.user_role_assignment ura ON ura.user_id=auth_user.user_id
+      JOIN app_security.role auth_role ON auth_role.role_id=ura.role_id AND auth_role.is_active=TRUE
+      JOIN app_security.role_capability rc ON rc.role_id=auth_role.role_id
+      JOIN app_security.capability cap ON cap.capability_id=rc.capability_id AND cap.is_active=TRUE
+      WHERE auth_user.user_id=? AND auth_user.is_active=TRUE
+        AND module_grant.reason LIKE 'KPI_APROBACION:%'
+        AND module_grant.valid_from<=CURRENT_TIMESTAMP AND (module_grant.valid_to IS NULL OR module_grant.valid_to>CURRENT_TIMESTAMP)
+        AND ura.valid_from<=CURRENT_TIMESTAMP AND (ura.valid_to IS NULL OR ura.valid_to>CURRENT_TIMESTAMP)
+        AND (ura.plant_id IS NULL OR ura.plant_id=v.plant_id)
+        AND rc.valid_from<=CURRENT_TIMESTAMP AND (rc.valid_to IS NULL OR rc.valid_to>CURRENT_TIMESTAMP)
+        AND cap.capability_code=?
+        AND EXISTS(SELECT 1 FROM app_security.user_plant_access gp
+          WHERE gp.user_id=auth_user.user_id AND gp.plant_id=v.plant_id
+            AND gp.valid_from<=CURRENT_TIMESTAMP AND (gp.valid_to IS NULL OR gp.valid_to>CURRENT_TIMESTAMP)
+            AND COALESCE(gp.reason,'') NOT LIKE 'KPI_MANUALES:%'
+            AND COALESCE(gp.reason,'') NOT LIKE 'KPI_APROBACION:%'
+            AND COALESCE(gp.reason,'') NOT LIKE 'KPI_OEE_VALIDATION_SCOPE %')
+    )
+    """);
   sql.append(" ORDER BY v.proposed_at DESC,v.kpi_validation_id,d.kpi_validation_detail_id");
   LinkedHashMap<Long,Builder>b=new LinkedHashMap<>();try(Connection c=ds.getConnection();PreparedStatement p=c.prepareStatement(sql.toString())){
-   if(id!=null)p.setLong(1,id);
+   int nextParam=1;
+   if(id!=null)p.setLong(nextParam++,id);
+   if(scopedUser!=null){p.setLong(nextParam++,scopedUser);p.setString(nextParam++,approverCapability);}
    try(ResultSet r=p.executeQuery()){while(r.next()){
     long vid=r.getLong("kpi_validation_id");Builder x=b.computeIfAbsent(vid,k->new Builder(r));
     Long kr=objLong(r,"kpi_result_id"),sc=objLong(r,"stop_classification_id"),md=objLong(r,"metric_definition_id");

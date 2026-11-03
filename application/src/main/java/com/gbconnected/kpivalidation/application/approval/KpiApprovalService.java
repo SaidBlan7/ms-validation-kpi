@@ -15,12 +15,12 @@ public final class KpiApprovalService implements KpiApprovalUseCase {
     }
     public List<ApprovalValidationView> pending(ActorContext actor){
         long user=actorUser(actor); persistence.expirePending(clock.instant(),null);
-        return persistence.pending().stream().filter(v->authorized(actor,user,v)).toList();
+        return persistence.scopedPending(user).stream().filter(v->authorized(actor,user,v)).toList();
     }
     public ApprovalValidationPageView list(ActorContext actor,ApprovalValidationQuery query){
         long user=actorUser(actor); persistence.expirePending(clock.instant(),null);
         ApprovalValidationQuery q=query==null?ApprovalValidationQuery.defaults():query;
-        List<ApprovalValidationView> filtered=persistence.all().stream()
+        List<ApprovalValidationView> filtered=persistence.scopedAll(user).stream()
                 .filter(v->authorized(actor,user,v))
                 .filter(v->q.status()==null||q.status().equals(v.status()))
                 .filter(v->q.validationDomain()==null||q.validationDomain().equals(v.validationDomain()))
@@ -36,12 +36,12 @@ public final class KpiApprovalService implements KpiApprovalUseCase {
     }
     public ApprovalValidationView get(ActorContext actor,long id){
         if(id<=0)throw new IllegalArgumentException("validationId must be positive"); long user=actorUser(actor);persistence.expirePending(clock.instant(),null);
-        ApprovalValidationView v=persistence.find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found")); requireAuthorized(actor,user,v); return v;
+        ApprovalValidationView v=persistence.scopedFind(id,user).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found")); requireAuthorized(actor,user,v); return v;
     }
     public ApprovalValidationView decide(ActorContext actor,long id,ApprovalDecision decision,String correlationId){
         if(id<=0)throw new IllegalArgumentException("validationId must be positive"); if(decision==null)throw new IllegalArgumentException("decision is required");
         long user=actorUser(actor); persistence.expirePending(clock.instant(),correlationId);
-        ApprovalValidationView v=persistence.find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found")); requireAuthorized(actor,user,v);
+        ApprovalValidationView v=persistence.scopedFind(id,user).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found")); requireAuthorized(actor,user,v);
         if(v.proposedByUserId()==user) throw new AuthorizationException("The proposing validator cannot approve or reject their own change");
         if(v.changes().isEmpty()) throw new ApprovalConflictException("Validation has no value changes");
         if("MIXED".equals(v.validationDomain()))

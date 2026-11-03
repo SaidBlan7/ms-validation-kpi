@@ -22,6 +22,12 @@ public final class JdbcManualKpiScopeAdapter implements ManualKpiScopePort {
               JOIN core.line l ON l.line_id=ula.line_id AND l.is_active=TRUE
               JOIN core.line_plant_assignment lpa ON lpa.line_id=l.line_id AND lpa.plant_id=p.plant_id
              WHERE u.entra_tenant_id=? AND u.entra_object_id=? AND u.is_active=TRUE
+               AND EXISTS (SELECT 1 FROM app_security.user_plant_access gp
+                     WHERE gp.user_id=u.user_id AND gp.plant_id=p.plant_id
+                       AND gp.valid_from<=CURRENT_TIMESTAMP AND (gp.valid_to IS NULL OR gp.valid_to>CURRENT_TIMESTAMP)
+                       AND COALESCE(gp.reason,'') NOT LIKE 'KPI_MANUALES:%'
+                       AND COALESCE(gp.reason,'') NOT LIKE 'KPI_APROBACION:%'
+                       AND COALESCE(gp.reason,'') NOT LIKE 'KPI_OEE_VALIDATION_SCOPE %')
                AND upa.valid_from<=CURRENT_TIMESTAMP AND (upa.valid_to IS NULL OR upa.valid_to>CURRENT_TIMESTAMP)
                AND ula.valid_from<=CURRENT_TIMESTAMP AND (ula.valid_to IS NULL OR ula.valid_to>CURRENT_TIMESTAMP)
                AND lpa.valid_from<=CURRENT_TIMESTAMP AND (lpa.valid_to IS NULL OR lpa.valid_to>CURRENT_TIMESTAMP)

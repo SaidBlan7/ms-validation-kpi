@@ -21,7 +21,14 @@ public final class JdbcKpiApprovalAuthorizationAdapter implements KpiApprovalAut
               JOIN app_security.capability c ON c.capability_id=rc.capability_id AND c.is_active=TRUE
               JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id
              WHERE u.user_id=? AND u.is_active=TRUE
-               AND upa.plant_id=? AND LEFT(upa.reason,15)='KPI_APROBACION:'
+               AND upa.plant_id=?
+                AND EXISTS (SELECT 1 FROM app_security.user_plant_access general_grant
+                    WHERE general_grant.user_id=u.user_id AND general_grant.plant_id=upa.plant_id
+                    AND general_grant.valid_from<=CURRENT_TIMESTAMP
+                    AND (general_grant.valid_to IS NULL OR general_grant.valid_to>CURRENT_TIMESTAMP)
+                    AND COALESCE(general_grant.reason,'') NOT LIKE 'KPI_MANUALES:%'
+                    AND COALESCE(general_grant.reason,'') NOT LIKE 'KPI_APROBACION:%'
+                    AND COALESCE(general_grant.reason,'') NOT LIKE 'KPI_OEE_VALIDATION_SCOPE %') AND LEFT(upa.reason,15)='KPI_APROBACION:'
                AND upa.valid_from<=CURRENT_TIMESTAMP AND (upa.valid_to IS NULL OR upa.valid_to>CURRENT_TIMESTAMP)
                AND ura.valid_from<=CURRENT_TIMESTAMP AND (ura.valid_to IS NULL OR ura.valid_to>CURRENT_TIMESTAMP)
                AND (ura.plant_id IS NULL OR ura.plant_id=upa.plant_id)

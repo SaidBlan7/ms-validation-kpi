@@ -59,6 +59,12 @@ public final class JdbcValidatorAssignmentAdapter implements ValidatorAssignment
                        AND u.is_active = TRUE
                        AND upa.plant_id = ?
                        AND starts_with(upa.reason, 'KPI_OEE_VALIDATION_SCOPE | externalApprovalReference=')
+                   AND EXISTS (SELECT 1 FROM app_security.user_plant_access gp
+                       WHERE gp.user_id=u.user_id AND gp.plant_id=upa.plant_id
+                         AND gp.valid_from<=CURRENT_TIMESTAMP AND (gp.valid_to IS NULL OR gp.valid_to>CURRENT_TIMESTAMP)
+                         AND COALESCE(gp.reason,'') NOT LIKE 'KPI_MANUALES:%'
+                         AND COALESCE(gp.reason,'') NOT LIKE 'KPI_APROBACION:%'
+                         AND COALESCE(gp.reason,'') NOT LIKE 'KPI_OEE_VALIDATION_SCOPE %')
                    AND upa.valid_from <= CURRENT_TIMESTAMP
                        AND (upa.valid_to IS NULL OR upa.valid_to > CURRENT_TIMESTAMP)
                        AND ura.valid_from <= CURRENT_TIMESTAMP
@@ -93,6 +99,12 @@ public final class JdbcValidatorAssignmentAdapter implements ValidatorAssignment
                    AND u.entra_object_id = ?
                    AND u.is_active = TRUE
                    AND starts_with(upa.reason, 'KPI_OEE_VALIDATION_SCOPE | externalApprovalReference=')
+                   AND EXISTS (SELECT 1 FROM app_security.user_plant_access gp
+                       WHERE gp.user_id=u.user_id AND gp.plant_id=upa.plant_id
+                         AND gp.valid_from<=CURRENT_TIMESTAMP AND (gp.valid_to IS NULL OR gp.valid_to>CURRENT_TIMESTAMP)
+                         AND COALESCE(gp.reason,'') NOT LIKE 'KPI_MANUALES:%'
+                         AND COALESCE(gp.reason,'') NOT LIKE 'KPI_APROBACION:%'
+                         AND COALESCE(gp.reason,'') NOT LIKE 'KPI_OEE_VALIDATION_SCOPE %')
                    AND upa.valid_from <= CURRENT_TIMESTAMP
                    AND (upa.valid_to IS NULL OR upa.valid_to > CURRENT_TIMESTAMP)
                    AND ura.valid_from <= CURRENT_TIMESTAMP
@@ -128,6 +140,12 @@ public final class JdbcValidatorAssignmentAdapter implements ValidatorAssignment
                  WHERE u.is_active = TRUE
                    AND upa.plant_id = ?
                        AND starts_with(upa.reason, 'KPI_OEE_VALIDATION_SCOPE | externalApprovalReference=')
+                   AND EXISTS (SELECT 1 FROM app_security.user_plant_access gp
+                       WHERE gp.user_id=u.user_id AND gp.plant_id=upa.plant_id
+                         AND gp.valid_from<=CURRENT_TIMESTAMP AND (gp.valid_to IS NULL OR gp.valid_to>CURRENT_TIMESTAMP)
+                         AND COALESCE(gp.reason,'') NOT LIKE 'KPI_MANUALES:%'
+                         AND COALESCE(gp.reason,'') NOT LIKE 'KPI_APROBACION:%'
+                         AND COALESCE(gp.reason,'') NOT LIKE 'KPI_OEE_VALIDATION_SCOPE %')
                    AND upa.valid_from <= CURRENT_TIMESTAMP
                    AND (upa.valid_to IS NULL OR upa.valid_to > CURRENT_TIMESTAMP)
                    AND ura.valid_from <= CURRENT_TIMESTAMP

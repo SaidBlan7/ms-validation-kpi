@@ -25,6 +25,13 @@ public final class JdbcManualKpiAuthorizationAdapter implements ManualKpiAuthori
               JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id AND upa.reason LIKE 'KPI_MANUALES:%'
               WHERE u.entra_tenant_id=? AND u.entra_object_id=? AND u.is_active=TRUE
                 AND upa.plant_id=?
+                AND EXISTS (SELECT 1 FROM app_security.user_plant_access general_grant
+                    WHERE general_grant.user_id=u.user_id AND general_grant.plant_id=upa.plant_id
+                    AND general_grant.valid_from<=CURRENT_TIMESTAMP
+                    AND (general_grant.valid_to IS NULL OR general_grant.valid_to>CURRENT_TIMESTAMP)
+                    AND COALESCE(general_grant.reason,'') NOT LIKE 'KPI_MANUALES:%'
+                    AND COALESCE(general_grant.reason,'') NOT LIKE 'KPI_APROBACION:%'
+                    AND COALESCE(general_grant.reason,'') NOT LIKE 'KPI_OEE_VALIDATION_SCOPE %')
                 AND upa.valid_from<=CURRENT_TIMESTAMP AND (upa.valid_to IS NULL OR upa.valid_to>CURRENT_TIMESTAMP)
                 AND ura.valid_from<=CURRENT_TIMESTAMP AND (ura.valid_to IS NULL OR ura.valid_to>CURRENT_TIMESTAMP)
                 AND (ura.plant_id IS NULL OR ura.plant_id=upa.plant_id)
