@@ -76,4 +76,39 @@ class KpiApprovalServiceTest {
         service(db,true,true).decide(ACTOR,31,ApprovalDecision.REJECTED,"test-5");
         assertEquals(1,db.decisions);
     }
+
+    private static ApprovalValidationView waste(String domain, List<ApprovalValueChangeView> details) {
+        return new ApprovalValidationView(31,domain,"WASTE_METRIC","PENDING",9,"P9","Planta",11L,"L11","Linea",
+                LocalDate.parse("2026-11-02"),"SYSTEM",null,null,null,"GBS-123",19,"validador",
+                NOW.minusSeconds(100),NOW.plusSeconds(100),null,null,null,true,details);
+    }
+    private static ApprovalValueChangeView wasteValue(String domain) {
+        return new ApprovalValueChangeView(null,null,null,null,null,null,null,4L,"WASTE_KG","Desperdicio",
+                domain,new java.math.BigDecimal("100.000000"),new java.math.BigDecimal("90.000000"),null,null,1L,"KG","kg");
+    }
+    @Test void wasteApprovalUsesExistingCanonicalValidationWithoutNewWasteMovement() {
+        Store db=new Store(19,"PENDING"); db.view=waste("WASTE",List.of(wasteValue("WASTE")));
+        service(db,true,true).decide(ACTOR,31,ApprovalDecision.APPROVED,"waste-approve");
+        assertEquals(1,db.decisions);
+    }
+    @Test void wasteRejectionUsesSameAtomicDecisionPath() {
+        Store db=new Store(19,"PENDING"); db.view=waste("WASTE",List.of(wasteValue("WASTE")));
+        service(db,true,true).decide(ACTOR,31,ApprovalDecision.REJECTED,"waste-reject");
+        assertEquals(1,db.decisions);
+    }
+    @Test void mixedWasteAndOeeValidationIsBlocked() {
+        Store db=new Store(19,"PENDING"); db.view=waste("MIXED",List.of(wasteValue("WASTE")));
+        assertThrows(ApprovalConflictException.class,()->service(db,true,true).decide(ACTOR,31,ApprovalDecision.APPROVED,"waste-mixed"));
+        assertEquals(0,db.decisions);
+    }
+    @Test void wasteWithoutSourceDetailIsBlocked() {
+        Store db=new Store(19,"PENDING"); db.view=waste("WASTE",List.of());
+        assertThrows(ApprovalConflictException.class,()->service(db,true,true).decide(ACTOR,31,ApprovalDecision.APPROVED,"waste-empty"));
+        assertEquals(0,db.decisions);
+    }
+    @Test void wasteWithIncorrectMetricSourceIsBlocked() {
+        Store db=new Store(19,"PENDING"); db.view=waste("WASTE",List.of(wasteValue("SCHEDULING")));
+        assertThrows(ApprovalConflictException.class,()->service(db,true,true).decide(ACTOR,31,ApprovalDecision.APPROVED,"waste-foreign"));
+        assertEquals(0,db.decisions);
+    }
 }

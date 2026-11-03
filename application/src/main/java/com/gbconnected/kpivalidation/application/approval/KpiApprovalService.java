@@ -43,6 +43,12 @@ public final class KpiApprovalService implements KpiApprovalUseCase {
         long user=actorUser(actor); persistence.expirePending(clock.instant(),correlationId);
         ApprovalValidationView v=persistence.find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found")); requireAuthorized(actor,user,v);
         if(v.proposedByUserId()==user) throw new AuthorizationException("The proposing validator cannot approve or reject their own change");
+        if("MIXED".equals(v.validationDomain()))
+            throw new ApprovalConflictException("Validation mixes waste and OEE metrics and cannot be decided safely");
+        if("WASTE".equals(v.validationDomain()) && (v.changes().isEmpty() || v.changes().stream().anyMatch(
+                change -> change.metricDefinitionId()==null || !"WASTE".equalsIgnoreCase(change.metricSourceDomain())
+                        || change.stopClassificationId()!=null || change.kpiResultId()!=null)))
+            throw new ApprovalConflictException("Waste validation has incomplete or ambiguous source details");
         // The database is authoritative for the deadline and concurrency. A preflight
         // clock check can incorrectly reject a request or authorize one that waited
         // for a PostgreSQL lock. Exact retries are resolved by the persistence port.

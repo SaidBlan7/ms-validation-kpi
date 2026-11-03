@@ -39,6 +39,10 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
       throw new ApprovalConflictException("Validation has an immutable final outcome: "+currentStatus);
      }
     } else {
+     // Fail closed when a validation mixes waste and non-waste metric details.
+     // The canonical validation header has no domain column: source_domain on
+     // metric_definition is the authoritative discriminator for waste.
+     assertCoherentWasteDomain(c,id);
      Instant dbNow;
      try(PreparedStatement now=c.prepareStatement("SELECT clock_timestamp()" );ResultSet t=now.executeQuery()){
       t.next();dbNow=instant(t,"clock_timestamp");
@@ -64,6 +68,34 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
   }catch(ApprovalConflictException|ApprovalNotFoundException e){throw e;}
    catch(SQLException e){throw new IllegalStateException("Unable to decide KPI validation",e);}
   return find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found after decision"));
+ }
+ private static void assertCoherentWasteDomain(Connection c,long validationId) throws SQLException {
+  // Lock the detail rows while deciding so the scope cannot change between
+  // the domain check and the final state transition.
+  String sql="""
+      SELECT d.kpi_validation_detail_id, d.kpi_result_id, d.stop_classification_id,
+             d.metric_definition_id, md.source_domain
+      FROM kpi.kpi_validation_detail d
+      LEFT JOIN kpi.metric_definition md ON md.metric_definition_id=d.metric_definition_id
+      WHERE d.kpi_validation_id=?
+      ORDER BY d.kpi_validation_detail_id FOR UPDATE OF d
+      """;
+  boolean anyWaste=false,anyOther=false;
+  try(PreparedStatement statement=c.prepareStatement(sql)) {
+   statement.setLong(1,validationId);
+   try(ResultSet r=statement.executeQuery()) {
+    while(r.next()) {
+     String source=r.getString("source_domain");
+     boolean waste="WASTE".equalsIgnoreCase(source==null?"":source.trim());
+     boolean exclusivelyWaste=waste && objLong(r,"metric_definition_id")!=null
+         && objLong(r,"kpi_result_id")==null && objLong(r,"stop_classification_id")==null;
+     if(waste)anyWaste=true;
+     if(!exclusivelyWaste)anyOther=true;
+    }
+   }
+  }
+  if(anyWaste && anyOther) throw new ApprovalConflictException(
+      "Waste validation has mixed or ambiguous metric details; decision blocked");
  }
  public boolean supportsWasteValidations(){return true;}
  private List<ApprovalValidationView> query(Long id,boolean pendingOnly){
@@ -116,9 +148,16 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
   Builder(ResultSet r){try{id=r.getLong("kpi_validation_id");plant=r.getLong("plant_id");plantCode=r.getString("plant_code");plantName=r.getString("plant_name");line=objLong(r,"line_id");lineCode=r.getString("line_code");lineName=r.getString("line_name");date=r.getObject("oee_date",LocalDate.class);status=r.getString("status_code");reason=r.getString("reason_type");justification=r.getString("justification");cause=r.getString("cause");plan=r.getString("action_plan");incident=r.getString("incident_reference");proposedBy=r.getLong("proposed_by_user_id");proposedByName=r.getString("proposed_by_display_name");proposedAt=instant(r,"proposed_at");expires=instant(r,"expires_at");decidedBy=objLong(r,"approved_by_user_id");decidedByName=r.getString("decided_by_display_name");decidedAt=instant(r,"approved_at");}catch(SQLException e){throw new IllegalStateException(e);}}
   ApprovalValidationView build(){
    boolean stop=changes.stream().anyMatch(x->x.stopClassificationId()!=null),metric=changes.stream().anyMatch(x->x.metricDefinitionId()!=null),kpi=changes.stream().anyMatch(x->x.kpiResultId()!=null);
-   boolean waste=!stop&&!metricSourceDomains.isEmpty()&&metricSourceDomains.stream().allMatch("WASTE"::equals);
-   String domain=waste?"WASTE":"OEE";
-   String kind=waste?"WASTE_METRIC":stop?"STOP_TIME":metric?"MASS_PERFORMANCE":kpi?"KPI_RESULT":"OEE_OTHER";
+   // The canonical header does not declare OEE vs WASTE. Only rows backed by
+   // WASTE metric definitions, with no OEE references, are waste validations.
+   // Mixed or ambiguous rows must never be silently classified as WASTE.
+   boolean hasWaste=metricSourceDomains.contains("WASTE");
+   boolean waste=hasWaste && changes.stream().allMatch(x -> x.metricDefinitionId()!=null
+           && "WASTE".equalsIgnoreCase(x.metricSourceDomain())
+           && x.kpiResultId()==null && x.stopClassificationId()==null);
+   boolean mixed=hasWaste && !waste;
+   String domain=mixed?"MIXED":waste?"WASTE":"OEE";
+   String kind=mixed?"MIXED_METRICS":waste?"WASTE_METRIC":stop?"STOP_TIME":metric?"MASS_PERFORMANCE":kpi?"KPI_RESULT":"OEE_OTHER";
    List<ApprovalValueChangeView> effectiveChanges=changes.stream().map(x->x.withEffectiveForStatus(status)).toList();
    return new ApprovalValidationView(id,domain,kind,status,plant,plantCode,plantName,line,lineCode,lineName,date,reason,justification,cause,plan,incident,proposedBy,proposedByName,proposedAt,expires,decidedBy,decidedByName,decidedAt,"PENDING".equals(status),effectiveChanges);
   }
