@@ -127,7 +127,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
                 validationPersistence = new JdbcValidationPersistenceAdapter(ds, elaboratedMetricCode, deliveredMetricCode);
-                approvalPersistence = new JdbcKpiApprovalPersistenceAdapter(ds);
+                approvalPersistence = new JdbcKpiApprovalPersistenceAdapter(ds,
+                        env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"));
                 approvalAuthorization = new JdbcKpiApprovalAuthorizationAdapter(ds,
                         env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"));
                 approvalFeatureActivation = new JdbcFeatureActivationAdapter(ds,
@@ -160,7 +161,8 @@ public final class MicroserviceRuntime implements AutoCloseable {
                 oeeMetrics = new JdbcOeeMetricSourceAdapter(ds);
                 actorIdentity = new JdbcActorIdentityAdapter(ds);
                 validationPersistence = new JdbcValidationPersistenceAdapter(ds, elaboratedMetricCode, deliveredMetricCode);
-                approvalPersistence = new JdbcKpiApprovalPersistenceAdapter(ds);
+                approvalPersistence = new JdbcKpiApprovalPersistenceAdapter(ds,
+                        env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"));
                 approvalAuthorization = new JdbcKpiApprovalAuthorizationAdapter(ds,
                         env.getOrDefault("GBC_KPI_APPROVER_CAPABILITY_CODE", "KPI_APPROVAL"));
                 approvalFeatureActivation = new JdbcFeatureActivationAdapter(ds,

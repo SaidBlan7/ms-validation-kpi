@@ -3,7 +3,15 @@ import com.gbconnected.kpivalidation.application.approval.*;
 import com.gbconnected.kpivalidation.application.port.out.approval.KpiApprovalPersistencePort;
 import java.sql.*;import java.time.*;import java.util.*;import javax.sql.DataSource;
 public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersistencePort {
- private final DataSource ds; public JdbcKpiApprovalPersistenceAdapter(DataSource ds){this.ds=Objects.requireNonNull(ds);}
+ private final DataSource ds;
+ private final String approverCapability;
+ public JdbcKpiApprovalPersistenceAdapter(DataSource ds, String approverCapability){
+  this.ds=Objects.requireNonNull(ds);
+  if(approverCapability==null || approverCapability.isBlank()) throw new IllegalArgumentException("approver capability is required");
+  this.approverCapability=approverCapability;
+ }
+ /** Compatibility constructor; deployed runtimes must use the configured capability. */
+ public JdbcKpiApprovalPersistenceAdapter(DataSource ds){this(ds,"KPI_APPROVAL");}
  public List<ApprovalValidationView> pending(){return query(null,true);}
  public List<ApprovalValidationView> all(){return query(null,false);}
  public Optional<ApprovalValidationView> find(long id){List<ApprovalValidationView>x=query(id,false);return x.stream().findFirst();}
@@ -32,6 +40,7 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
       originalDecider=objLong(row,"approved_by_user_id");
      }
     }
+    assertCurrentApproverGrant(c,id,userId);
     if(!"PENDING".equals(currentStatus)){
      if(currentStatus.equals(decision.name()) && Objects.equals(originalDecider,userId)){
       c.commit(); // Same actor + same outcome: safe idempotent retry.
@@ -43,6 +52,7 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
      // The canonical validation header has no domain column: source_domain on
      // metric_definition is the authoritative discriminator for waste.
      assertCoherentWasteDomain(c,id);
+     if (proposerIsDecider(c,id,userId)) throw new ApprovalConflictException("Proposer cannot decide their own validation");
      Instant dbNow;
      try(PreparedStatement now=c.prepareStatement("SELECT clock_timestamp()" );ResultSet t=now.executeQuery()){
       t.next();dbNow=instant(t,"clock_timestamp");
@@ -69,6 +79,41 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
    catch(SQLException e){throw new IllegalStateException("Unable to decide KPI validation",e);}
   return find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found after decision"));
  }
+ private void assertCurrentApproverGrant(Connection c,long validationId,long userId) throws SQLException {
+  // Lock the permission rows in the same transaction as the decision.
+  // Administrative revocations that UPDATE these records must wait for this
+  // transaction (or this decision must observe the committed revocation).
+  String sql="""
+     SELECT upa.user_plant_access_id
+       FROM kpi.kpi_validation v
+       JOIN app_security.user_identity u ON u.user_id=? AND u.is_active=TRUE
+       JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id AND upa.plant_id=v.plant_id
+       JOIN app_security.user_role_assignment ura ON ura.user_id=u.user_id
+       JOIN app_security.role r ON r.role_id=ura.role_id AND r.is_active=TRUE
+       JOIN app_security.role_capability rc ON rc.role_id=r.role_id
+       JOIN app_security.capability cap ON cap.capability_id=rc.capability_id AND cap.is_active=TRUE
+      WHERE v.kpi_validation_id=? AND upa.reason LIKE 'KPI_APROBACION:%'
+        AND upa.valid_from<=clock_timestamp() AND (upa.valid_to IS NULL OR upa.valid_to>clock_timestamp())
+        AND ura.valid_from<=clock_timestamp() AND (ura.valid_to IS NULL OR ura.valid_to>clock_timestamp())
+        AND (ura.plant_id IS NULL OR ura.plant_id=v.plant_id)
+        AND rc.valid_from<=clock_timestamp() AND (rc.valid_to IS NULL OR rc.valid_to>clock_timestamp())
+        AND cap.capability_code=?
+      FOR SHARE OF u,upa,ura
+     """;
+  try(PreparedStatement p=c.prepareStatement(sql)){
+   p.setLong(1,userId);p.setLong(2,validationId);p.setString(3,approverCapability);
+   try(ResultSet x=p.executeQuery()){
+    if(!x.next()) throw new com.gbconnected.kpivalidation.application.AuthorizationException(
+       "Approver permission was revoked or is no longer valid");
+   }
+  }
+ }
+ private static boolean proposerIsDecider(Connection c,long id,long userId) throws SQLException {
+  try(PreparedStatement p=c.prepareStatement("SELECT proposed_by_user_id=? FROM kpi.kpi_validation WHERE kpi_validation_id=?")){
+   p.setLong(1,userId);p.setLong(2,id);
+   try(ResultSet r=p.executeQuery()){return r.next()&&r.getBoolean(1);}
+  }
+ }
  private static void assertCoherentWasteDomain(Connection c,long validationId) throws SQLException {
   // Lock the detail rows while deciding so the scope cannot change between
   // the domain check and the final state transition.
@@ -80,11 +125,12 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
       WHERE d.kpi_validation_id=?
       ORDER BY d.kpi_validation_detail_id FOR UPDATE OF d
       """;
-  boolean anyWaste=false,anyOther=false;
+  boolean anyWaste=false,anyOther=false,anyDetail=false;
   try(PreparedStatement statement=c.prepareStatement(sql)) {
    statement.setLong(1,validationId);
    try(ResultSet r=statement.executeQuery()) {
     while(r.next()) {
+     anyDetail=true;
      String source=r.getString("source_domain");
      boolean waste="WASTE".equalsIgnoreCase(source==null?"":source.trim());
      boolean exclusivelyWaste=waste && objLong(r,"metric_definition_id")!=null
@@ -94,6 +140,7 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
     }
    }
   }
+  if(!anyDetail) throw new ApprovalConflictException("Cannot approve a validation without value changes");
   if(anyWaste && anyOther) throw new ApprovalConflictException(
       "Waste validation has mixed or ambiguous metric details; decision blocked");
  }

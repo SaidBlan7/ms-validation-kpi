@@ -43,6 +43,7 @@ public final class KpiApprovalService implements KpiApprovalUseCase {
         long user=actorUser(actor); persistence.expirePending(clock.instant(),correlationId);
         ApprovalValidationView v=persistence.find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found")); requireAuthorized(actor,user,v);
         if(v.proposedByUserId()==user) throw new AuthorizationException("The proposing validator cannot approve or reject their own change");
+        if(v.changes().isEmpty()) throw new ApprovalConflictException("Validation has no value changes");
         if("MIXED".equals(v.validationDomain()))
             throw new ApprovalConflictException("Validation mixes waste and OEE metrics and cannot be decided safely");
         if("WASTE".equals(v.validationDomain()) && (v.changes().isEmpty() || v.changes().stream().anyMatch(

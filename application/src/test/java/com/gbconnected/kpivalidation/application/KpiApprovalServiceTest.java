@@ -30,7 +30,9 @@ class KpiApprovalServiceTest {
     private static ApprovalValidationView sample(long proposer,String state){
         return new ApprovalValidationView(31,"OEE","KPI_RESULT",state,9,"P9","Planta",11L,"L11","Linea",
                 LocalDate.parse("2026-11-02"),"OPERATIVE",null,"cause","plan",null,
-                proposer,"validador",NOW.minusSeconds(100),NOW.plusSeconds(100),null,null,null,"PENDING".equals(state),List.of());
+                proposer,"validador",NOW.minusSeconds(100),NOW.plusSeconds(100),null,null,null,"PENDING".equals(state),List.of(
+                new ApprovalValueChangeView(8L,"OEE","OEE",null,null,null,null,null,null,null,null,
+                        java.math.BigDecimal.TEN,java.math.BigDecimal.ONE,null,null,1L,"PCT","%")));
     }
     private static KpiApprovalService service(Store store,boolean hasPlant,boolean isApprover){
         ActorIdentityPort identity=new ActorIdentityPort(){
@@ -85,6 +87,12 @@ class KpiApprovalServiceTest {
     private static ApprovalValueChangeView wasteValue(String domain) {
         return new ApprovalValueChangeView(null,null,null,null,null,null,null,4L,"WASTE_KG","Desperdicio",
                 domain,new java.math.BigDecimal("100.000000"),new java.math.BigDecimal("90.000000"),null,null,1L,"KG","kg");
+    }
+    @Test void emptyOeeValidationCannotBeDecided() {
+        Store db=new Store(19,"PENDING");
+        db.view=waste("OEE",List.of());
+        assertThrows(ApprovalConflictException.class,()->service(db,true,true).decide(ACTOR,31,ApprovalDecision.APPROVED,"empty"));
+        assertEquals(0,db.decisions);
     }
     @Test void wasteApprovalUsesExistingCanonicalValidationWithoutNewWasteMovement() {
         Store db=new Store(19,"PENDING"); db.view=waste("WASTE",List.of(wasteValue("WASTE")));

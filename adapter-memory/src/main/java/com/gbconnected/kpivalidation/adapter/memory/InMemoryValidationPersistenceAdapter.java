@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class InMemoryValidationPersistenceAdapter implements ValidationPersistencePort, KpiApprovalPersistencePort {
     private final AtomicLong sequence = new AtomicLong();
+    private final ConcurrentHashMap<Long, ApprovalValidationView> wasteById = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, OeeValidationResult> byId = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Long> byKpiResult = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> byStopTime = new ConcurrentHashMap<>();
@@ -99,9 +100,11 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     @Override
     public List<ApprovalValidationView> pending() {
         return java.util.stream.Stream.concat(
-                        java.util.stream.Stream.concat(byId.values().stream().map(this::approval),
-                                stopById.values().stream().map(this::approval)),
-                        massById.values().stream().map(this::approval))
+                        java.util.stream.Stream.concat(
+                            java.util.stream.Stream.concat(byId.values().stream().map(this::approval),
+                                    stopById.values().stream().map(this::approval)),
+                            massById.values().stream().map(this::approval)),
+                        wasteById.values().stream())
                 .filter(v -> "PENDING".equals(v.status()))
                 .sorted(java.util.Comparator.comparing(ApprovalValidationView::proposedAt).reversed())
                 .toList();
@@ -110,9 +113,11 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
     @Override
     public List<ApprovalValidationView> all() {
         return java.util.stream.Stream.concat(
-                        java.util.stream.Stream.concat(byId.values().stream().map(this::approval),
-                                stopById.values().stream().map(this::approval)),
-                        massById.values().stream().map(this::approval))
+                        java.util.stream.Stream.concat(
+                            java.util.stream.Stream.concat(byId.values().stream().map(this::approval),
+                                    stopById.values().stream().map(this::approval)),
+                            massById.values().stream().map(this::approval)),
+                        wasteById.values().stream())
                 .sorted(java.util.Comparator.comparing(ApprovalValidationView::proposedAt).reversed())
                 .toList();
     }
@@ -122,14 +127,32 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
         if (byId.containsKey(validationId)) return Optional.of(approval(byId.get(validationId)));
         if (stopById.containsKey(validationId)) return Optional.of(approval(stopById.get(validationId)));
         if (massById.containsKey(validationId)) return Optional.of(approval(massById.get(validationId)));
-        return Optional.empty();
+        return Optional.ofNullable(wasteById.get(validationId));
     }
 
     @Override
     public synchronized ApprovalValidationView decide(long validationId, long userId, ApprovalDecision decision, Instant at, String correlationId) {
+        ApprovalValidationView current = find(validationId).orElseThrow(() -> new ApprovalNotFoundException("KPI validation not found"));
+        if (!"PENDING".equals(current.status())) {
+            if (current.status().equals(decision.name()) && java.util.Objects.equals(current.decidedByUserId(), userId)) return current;
+            throw new ApprovalConflictException("Validation has an immutable final outcome: " + current.status());
+        }
+        if (current.proposedByUserId() == userId) throw new ApprovalConflictException("Proposer cannot decide their own validation");
+        if (current.changes().isEmpty()) throw new ApprovalConflictException("Validation has no value changes");
+        if ("MIXED".equals(current.validationDomain())) throw new ApprovalConflictException("Mixed metric domains cannot be decided");
+        if ("WASTE".equals(current.validationDomain()) && current.changes().stream().anyMatch(x ->
+                x.metricDefinitionId() == null || !"WASTE".equalsIgnoreCase(x.metricSourceDomain())
+                || x.kpiResultId() != null || x.stopClassificationId() != null))
+            throw new ApprovalConflictException("Ambiguous waste validation detail");
+        ensurePending(current.status(), current.expiresAt(), at);
+        if (wasteById.containsKey(validationId)) {
+            ApprovalValidationView v = wasteById.get(validationId);
+            ApprovalValidationView updated = withWasteStatus(v, decision.name(), userId, at);
+            wasteById.put(validationId, updated);
+            return updated;
+        }
         if (byId.containsKey(validationId)) {
             OeeValidationResult r = byId.get(validationId);
-            ensurePending(r.status(), r.expiresAt(), at);
             r = new OeeValidationResult(r.validationId(), decision.name(), r.plantId(), r.lineId(), r.businessDate(),
                     r.metricCode(), r.kpiResultId(), r.originalValue(), r.proposedValue(), r.uomId(), r.reasonType(),
                     r.justification(), r.operationalCause(), r.actionPlan(), r.incidentReference(), r.proposedByUserId(),
@@ -177,6 +200,8 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
                         r.actionPlan(), r.incidentReference(), r.proposedByUserId(), r.proposedAt(), r.expiresAt(), null, null,
                         r.auditEvidence(), r.issues())
                 : r);
+        wasteById.replaceAll((k, v) -> "PENDING".equals(v.status()) && now.isAfter(v.expiresAt())
+                ? withWasteStatus(v, "EXPIRED", null, null) : v);
         massById.replaceAll((k, r) -> "PENDING".equals(r.status()) && r.expiresAt().isBefore(now)
                 ? new MassPerformanceValidationResult(r.validationId(), "EXPIRED", r.plantId(), r.lineId(), r.businessDate(),
                         r.uomId(), r.variable(), r.originalValue(), r.proposedValue(), r.sourceAggregateKey(), r.sourceType(),
@@ -185,7 +210,34 @@ public final class InMemoryValidationPersistenceAdapter implements ValidationPer
                 : r);
     }
 
-    @Override public boolean supportsWasteValidations() { return false; }
+    @Override public boolean supportsWasteValidations() { return true; }
+
+    /** Seed a canonical APP-originated waste validation in development/test mode.
+     *  This registers a proposal, NOT a waste movement. Never changes a waste event.
+     */
+    public synchronized void registerWasteValidation(ApprovalValidationView v) {
+        java.util.Objects.requireNonNull(v, "validation");
+        if (v.validationId() <= 0 || v.plantId() <= 0 || v.proposedByUserId() <= 0
+                || !"PENDING".equals(v.status()) || !"WASTE".equals(v.validationDomain())
+                || v.proposedAt() == null || v.expiresAt() == null || v.expiresAt().isBefore(v.proposedAt())
+                || v.changes().isEmpty() || v.decidedByUserId() != null || v.decidedAt() != null
+                || v.changes().stream().anyMatch(x -> x.metricDefinitionId() == null
+                    || !"WASTE".equalsIgnoreCase(x.metricSourceDomain())
+                    || x.kpiResultId() != null || x.stopClassificationId() != null))
+            throw new IllegalArgumentException("Invalid canonical waste approval proposal");
+        if (find(v.validationId()).isPresent()) throw new ApprovalConflictException("Validation ID is already registered");
+        wasteById.put(v.validationId(), v);
+        sequence.accumulateAndGet(v.validationId(), Math::max);
+    }
+
+    private static ApprovalValidationView withWasteStatus(ApprovalValidationView v, String status, Long actor, Instant at) {
+        return new ApprovalValidationView(v.validationId(), v.validationDomain(), v.validationKind(), status,
+                v.plantId(), v.plantCode(), v.plantName(), v.lineId(), v.lineCode(), v.lineName(),
+                v.businessDate(), v.reasonType(), v.justification(), v.cause(), v.actionPlan(),
+                v.incidentReference(), v.proposedByUserId(), v.proposedByDisplayName(),
+                v.proposedAt(), v.expiresAt(), actor, null, at, "PENDING".equals(status),
+                v.changes().stream().map(x -> x.withEffectiveForStatus(status)).toList());
+    }
 
     private static void ensurePending(String status, Instant expiresAt, Instant decisionAt) {
         if (!"PENDING".equals(status) || decisionAt.isAfter(expiresAt)) {
