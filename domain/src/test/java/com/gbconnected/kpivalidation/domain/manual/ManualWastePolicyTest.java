@@ -18,6 +18,23 @@ class ManualWastePolicyTest {
         assertThrows(DomainValidationException.class, () -> policy.validateKilograms(new BigDecimal("-0.001")));
     }
 
+    @Test void acceptsCanonicalNumeric18Scale6BoundaryWithoutRounding() {
+        assertDoesNotThrow(() -> policy.validateKilograms(new BigDecimal("999999999999.999999")));
+        assertDoesNotThrow(() -> policy.validateKilograms(new BigDecimal("12.123456")));
+        assertDoesNotThrow(() -> policy.validateKilograms(new BigDecimal("12.1234560")));
+    }
+
+    @Test void rejectsValuesThatPostgresWouldRoundOrOverflow() {
+        assertThrows(DomainValidationException.class,
+                () -> policy.validateKilograms(new BigDecimal("0.0000001")));
+        assertThrows(DomainValidationException.class,
+                () -> policy.validateKilograms(new BigDecimal("12.1234567")));
+        assertThrows(DomainValidationException.class,
+                () -> policy.validateKilograms(new BigDecimal("1000000000000")));
+        assertThrows(DomainValidationException.class,
+                () -> policy.validateKilograms(new BigDecimal("999999999999.9999999")));
+    }
+
     @Test void producedTonnesMayBeZeroOrDecimalAndMayBeAbsent() {
         assertDoesNotThrow(() -> policy.validateProducedTonnes(null));
         assertDoesNotThrow(() -> policy.validateProducedTonnes(BigDecimal.ZERO));
