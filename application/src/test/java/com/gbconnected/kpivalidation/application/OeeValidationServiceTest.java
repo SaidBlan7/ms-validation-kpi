@@ -81,6 +81,21 @@ class OeeValidationServiceTest {
     }
 
     @Test
+    void anonymousDetailRequestIsDeniedBeforePersistenceLookup() {
+        // The fixture has no persistence adapter. A lookup would fail with an
+        // infrastructure exception; the authentication gate must run first.
+        assertThrows(AuthorizationException.class, () -> service(true).get(null, 123L));
+        assertThrows(AuthorizationException.class,
+                () -> service(true).get(new ActorContext(null, O, Set.of("GB.KPI.Validator")), 123L));
+    }
+
+    @Test
+    void unauthorizedDetailRequestIsDeniedBeforePersistenceLookup() {
+        assertThrows(AuthorizationException.class,
+                () -> service(true).get(new ActorContext(T, O, Set.of("OTHER_ROLE")), 123L));
+    }
+
+    @Test
     void previousDayIsEligibleWhenSpecificAssignmentExists() {
         var result = service(true).check(actor(), 1, 10, LocalDate.of(2026, 10, 8));
         assertTrue(result.eligible());

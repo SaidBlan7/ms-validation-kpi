@@ -955,11 +955,19 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
 
     @Override
     public OeeValidationResult get(ActorContext actor, long validationId) {
+        // Authenticate and enforce module entitlement before reading any validation detail.
+        // A forged/anonymous request must not perform an ID-based read of audit evidence.
+        if (actor == null || actor.tenantId() == null || actor.objectId() == null) {
+            throw new AuthorizationException("Authenticated Entra actor is required for KPI OEE validation");
+        }
+        List<ValidationIssue> issues = new ArrayList<>();
+        validateModuleEntitlement(actor, issues);
+        if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {
+            throw new AuthorizationException("Actor is not authorized for KPI OEE validation");
+        }
         if (validationId <= 0) throw new IllegalArgumentException("validationId must be positive");
         OeeValidationResult result = validationPersistence.findById(validationId)
                 .orElseThrow(() -> new ValidationNotFoundException("Validation not found"));
-        List<ValidationIssue> issues = new ArrayList<>();
-        validateModuleEntitlement(actor, issues);
         validateSpecificKpiAssignment(actor, result.plantId(), issues);
         validateFeatureActivation(result.plantId(), issues);
         if (issues.stream().anyMatch(i -> i.severity() == Severity.BLOCKER)) {

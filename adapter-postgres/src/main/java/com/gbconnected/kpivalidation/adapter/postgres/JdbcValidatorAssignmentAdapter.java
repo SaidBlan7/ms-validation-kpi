@@ -58,7 +58,8 @@ public final class JdbcValidatorAssignmentAdapter implements ValidatorAssignment
                        AND u.entra_object_id = ?
                        AND u.is_active = TRUE
                        AND upa.plant_id = ?
-                       AND upa.valid_from <= CURRENT_TIMESTAMP
+                       AND starts_with(upa.reason, 'KPI_OEE_VALIDATION_SCOPE | externalApprovalReference=')
+                   AND upa.valid_from <= CURRENT_TIMESTAMP
                        AND (upa.valid_to IS NULL OR upa.valid_to > CURRENT_TIMESTAMP)
                        AND ura.valid_from <= CURRENT_TIMESTAMP
                        AND (ura.valid_to IS NULL OR ura.valid_to > CURRENT_TIMESTAMP)
@@ -91,6 +92,7 @@ public final class JdbcValidatorAssignmentAdapter implements ValidatorAssignment
                  WHERE u.entra_tenant_id = ?
                    AND u.entra_object_id = ?
                    AND u.is_active = TRUE
+                   AND starts_with(upa.reason, 'KPI_OEE_VALIDATION_SCOPE | externalApprovalReference=')
                    AND upa.valid_from <= CURRENT_TIMESTAMP
                    AND (upa.valid_to IS NULL OR upa.valid_to > CURRENT_TIMESTAMP)
                    AND ura.valid_from <= CURRENT_TIMESTAMP
@@ -125,6 +127,7 @@ public final class JdbcValidatorAssignmentAdapter implements ValidatorAssignment
                   JOIN app_security.user_plant_access upa ON upa.user_id = u.user_id
                  WHERE u.is_active = TRUE
                    AND upa.plant_id = ?
+                       AND starts_with(upa.reason, 'KPI_OEE_VALIDATION_SCOPE | externalApprovalReference=')
                    AND upa.valid_from <= CURRENT_TIMESTAMP
                    AND (upa.valid_to IS NULL OR upa.valid_to > CURRENT_TIMESTAMP)
                    AND ura.valid_from <= CURRENT_TIMESTAMP
@@ -143,7 +146,7 @@ public final class JdbcValidatorAssignmentAdapter implements ValidatorAssignment
         } catch (SQLException ex) { throw new IllegalStateException("Unable to count KPI validators for plant", ex); }
     }
 
-    @Override public String source() { return "app_security.user_role_assignment(current-role)+user_plant_access+role_capability"; }
+    @Override public String source() { return "app_security.user_role_assignment(current-role)+user_plant_access(KPI_OEE_VALIDATION_SCOPE)+role_capability"; }
     @Override public boolean enforcesRoleCapability() { return true; }
     @Override public String roleCode() { return roleCode; }
     @Override public String capabilityCode() { return capabilityCode; }
