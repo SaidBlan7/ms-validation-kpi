@@ -6,7 +6,7 @@ import java.sql.*;
 import java.util.*;
 import javax.sql.DataSource;
 
-/** Canonical authorization: one current role + KPI approval capability, scoped by user_plant_access. */
+/** Canonical authorization: current role and approval capability with explicit module-specific plant assignment. */
 public final class JdbcKpiApprovalAuthorizationAdapter implements KpiApprovalAuthorizationPort {
     private final DataSource ds; private final String capability;
     public JdbcKpiApprovalAuthorizationAdapter(DataSource ds,String capability){this.ds=Objects.requireNonNull(ds);this.capability=Objects.requireNonNull(capability);}
@@ -21,7 +21,7 @@ public final class JdbcKpiApprovalAuthorizationAdapter implements KpiApprovalAut
               JOIN app_security.capability c ON c.capability_id=rc.capability_id AND c.is_active=TRUE
               JOIN app_security.user_plant_access upa ON upa.user_id=u.user_id
              WHERE u.user_id=? AND u.is_active=TRUE
-               AND upa.plant_id=?
+               AND upa.plant_id=? AND LEFT(upa.reason,15)='KPI_APROBACION:'
                AND upa.valid_from<=CURRENT_TIMESTAMP AND (upa.valid_to IS NULL OR upa.valid_to>CURRENT_TIMESTAMP)
                AND ura.valid_from<=CURRENT_TIMESTAMP AND (ura.valid_to IS NULL OR ura.valid_to>CURRENT_TIMESTAMP)
                AND (ura.plant_id IS NULL OR ura.plant_id=upa.plant_id)
@@ -31,5 +31,5 @@ public final class JdbcKpiApprovalAuthorizationAdapter implements KpiApprovalAut
         try(Connection x=ds.getConnection();PreparedStatement p=x.prepareStatement(sql)){p.setLong(1,userId);p.setLong(2,plantId);p.setString(3,capability);try(ResultSet r=p.executeQuery()){r.next();return r.getBoolean(1);}}
         catch(SQLException e){throw new IllegalStateException("Unable to authorize KPI approver",e);}
     }
-    public String source(){return "APP_SECURITY_CURRENT_ROLE_CAPABILITY_PLUS_USER_PLANT_ACCESS";}
+    public String source(){return "APP_SECURITY_ROLE_CAPABILITY_PLUS_KPI_APROBACION_PLANT_ASSIGNMENT";}
 }
