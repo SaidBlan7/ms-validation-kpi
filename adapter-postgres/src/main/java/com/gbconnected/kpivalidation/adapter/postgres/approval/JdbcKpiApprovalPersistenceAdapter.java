@@ -11,39 +11,59 @@ public final class JdbcKpiApprovalPersistenceAdapter implements KpiApprovalPersi
   String sql="UPDATE kpi.kpi_validation SET status_code='EXPIRED' WHERE status_code='PENDING' AND expires_at < clock_timestamp()";
   try(Connection c=ds.getConnection()){boolean ac=c.getAutoCommit();c.setAutoCommit(false);auditContext(c,null,correlationId);try(PreparedStatement p=c.prepareStatement(sql)){p.executeUpdate();}c.commit();c.setAutoCommit(ac);}catch(SQLException e){throw new IllegalStateException("Unable to expire KPI validations",e);}
  }
- public ApprovalValidationView decide(long id,long userId,ApprovalDecision decision,Instant at,String correlationId){
-  // Lock the row first, then obtain a single authoritative timestamp from PostgreSQL.
-  // A request waiting for another approver must not reuse a pre-lock Java timestamp.
-  String sql="""
-      WITH locked AS MATERIALIZED (
-        SELECT kpi_validation_id, expires_at
-          FROM kpi.kpi_validation
-         WHERE kpi_validation_id=? AND status_code='PENDING'
-         FOR UPDATE
-      ), decision_time AS MATERIALIZED (
-        SELECT clock_timestamp() AS decided_at FROM locked
-      )
-      UPDATE kpi.kpi_validation v
-         SET status_code=?, approved_by_user_id=?, approved_at=t.decided_at
-        FROM locked l, decision_time t
-       WHERE v.kpi_validation_id=l.kpi_validation_id
-         AND t.decided_at<=l.expires_at
-      """;
+ public ApprovalValidationView decide(long id,long userId,ApprovalDecision decision,Instant ignoredAt,String correlationId){
+  Objects.requireNonNull(decision,"decision is required");
+  // Serialize ALL requests against this validation, including exact retries.
+  // The database clock is read only after the row lock has been obtained.
+  String lockSql="SELECT status_code, expires_at, approved_by_user_id FROM kpi.kpi_validation WHERE kpi_validation_id=? FOR UPDATE";
+  String markSql="UPDATE kpi.kpi_validation SET status_code=?, approved_by_user_id=?, approved_at=? WHERE kpi_validation_id=? AND status_code='PENDING'";
   try(Connection c=ds.getConnection()){
-   boolean ac=c.getAutoCommit();c.setAutoCommit(false);
+   boolean originalAutoCommit=c.getAutoCommit();
+   c.setAutoCommit(false);
    try {
     auditContext(c,userId,correlationId);
-    int n;
-    try(PreparedStatement p=c.prepareStatement(sql)){
-     p.setLong(1,id);p.setString(2,decision.name());p.setLong(3,userId);
-     n=p.executeUpdate();
+    String currentStatus; Instant deadline; Long originalDecider;
+    try(PreparedStatement lock=c.prepareStatement(lockSql)){
+     lock.setLong(1,id);
+     try(ResultSet row=lock.executeQuery()){
+      if(!row.next())throw new ApprovalNotFoundException("KPI validation not found");
+      currentStatus=row.getString("status_code");
+      deadline=instant(row,"expires_at");
+      originalDecider=objLong(row,"approved_by_user_id");
+     }
     }
-    if(n!=1){c.rollback();throw new ApprovalConflictException("Validation was already decided or expired");}
-    c.commit();
-   } catch(SQLException|RuntimeException e){try{c.rollback();}catch(SQLException rollback){e.addSuppressed(rollback);}throw e;}
-   finally {c.setAutoCommit(ac);}
-   return find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found after decision"));
-  }catch(ApprovalConflictException e){throw e;}catch(SQLException e){throw new IllegalStateException("Unable to decide KPI validation",e);}
+    if(!"PENDING".equals(currentStatus)){
+     if(currentStatus.equals(decision.name()) && Objects.equals(originalDecider,userId)){
+      c.commit(); // Same actor + same outcome: safe idempotent retry.
+     } else {
+      throw new ApprovalConflictException("Validation has an immutable final outcome: "+currentStatus);
+     }
+    } else {
+     Instant dbNow;
+     try(PreparedStatement now=c.prepareStatement("SELECT clock_timestamp()" );ResultSet t=now.executeQuery()){
+      t.next();dbNow=instant(t,"clock_timestamp");
+     }
+     if(dbNow.isAfter(deadline)){
+      try(PreparedStatement expired=c.prepareStatement("UPDATE kpi.kpi_validation SET status_code='EXPIRED' WHERE kpi_validation_id=? AND status_code='PENDING'")){
+       expired.setLong(1,id);expired.executeUpdate();
+      }
+      c.commit(); // Expiration is permanent, with the canonical audit trigger.
+      throw new ApprovalConflictException("Validation expired before decision");
+     }
+     // Persist exactly one final decision and the actor atomically.
+     try(PreparedStatement update=c.prepareStatement(markSql)){
+      update.setString(1,decision.name());update.setLong(2,userId);update.setObject(3,OffsetDateTime.ofInstant(dbNow,ZoneOffset.UTC));update.setLong(4,id);
+      if(update.executeUpdate()!=1)throw new ApprovalConflictException("Validation is no longer pending");
+     }
+     c.commit();
+    }
+   } catch(SQLException|RuntimeException e){
+    try{if(!c.getAutoCommit())c.rollback();}catch(SQLException rollback){e.addSuppressed(rollback);}
+    throw e;
+   } finally {c.setAutoCommit(originalAutoCommit);}
+  }catch(ApprovalConflictException|ApprovalNotFoundException e){throw e;}
+   catch(SQLException e){throw new IllegalStateException("Unable to decide KPI validation",e);}
+  return find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found after decision"));
  }
  public boolean supportsWasteValidations(){return true;}
  private List<ApprovalValidationView> query(Long id,boolean pendingOnly){

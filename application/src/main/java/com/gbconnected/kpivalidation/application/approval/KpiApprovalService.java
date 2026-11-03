@@ -42,8 +42,10 @@ public final class KpiApprovalService implements KpiApprovalUseCase {
         if(id<=0)throw new IllegalArgumentException("validationId must be positive"); if(decision==null)throw new IllegalArgumentException("decision is required");
         long user=actorUser(actor); persistence.expirePending(clock.instant(),correlationId);
         ApprovalValidationView v=persistence.find(id).orElseThrow(()->new ApprovalNotFoundException("KPI validation not found")); requireAuthorized(actor,user,v);
-        if(!"PENDING".equals(v.status())) throw new ApprovalConflictException("Validation is no longer pending");
-        if(!clock.instant().isBefore(v.expiresAt()) && !clock.instant().equals(v.expiresAt())) throw new ApprovalConflictException("Validation has expired");
+        if(v.proposedByUserId()==user) throw new AuthorizationException("The proposing validator cannot approve or reject their own change");
+        // The database is authoritative for the deadline and concurrency. A preflight
+        // clock check can incorrectly reject a request or authorize one that waited
+        // for a PostgreSQL lock. Exact retries are resolved by the persistence port.
         return persistence.decide(id,user,decision,clock.instant(),correlationId);
     }
     public ApprovalPolicyView policy(){return new ApprovalPolicyView("PERSISTED_KPI_VALIDATION_EXPIRES_AT","ATOMIC_PENDING_STATE_TRANSITION",
