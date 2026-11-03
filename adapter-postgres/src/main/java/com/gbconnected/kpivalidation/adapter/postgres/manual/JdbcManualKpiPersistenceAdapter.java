@@ -3,6 +3,8 @@ package com.gbconnected.kpivalidation.adapter.postgres.manual;
 import com.gbconnected.kpivalidation.application.manual.*;
 import com.gbconnected.kpivalidation.application.port.out.manual.ManualKpiPersistencePort;
 import com.gbconnected.kpivalidation.domain.DomainValidationException;
+import com.gbconnected.kpivalidation.domain.manual.ManualKpiDatePolicy;
+import com.gbconnected.kpivalidation.domain.manual.ManualKpiDateSelection;
 import com.google.gson.*;
 import org.postgresql.util.PGobject;
 
@@ -68,6 +70,9 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
                 if (findInTransaction(c, command.plantId(), command.lineId(), command.businessDate()).isPresent()) {
                     throw new ManualKpiConflictException("Manual KPI record already exists");
                 }
+                // Recheck against the database clock AFTER acquiring the business-key lock.
+                // A request that waited for another writer may have crossed the 96-hour boundary.
+                requireCaptureDateEligible(c, command.businessDate(), timezone);
                 ManualKpiAuditEvent createEvent = new ManualKpiAuditEvent(1, "CREATE", actorUserId, createdAt, correlationId, "SUCCESS");
                 ManualKpiRecord provisional = new ManualKpiRecord(0L, 1L, command.plantId(), command.lineId(), command.businessDate(),
                         timezone, normalizeOee(command.oee()), normalizeWaste(command.waste()), actorUserId, createdAt,
@@ -349,6 +354,25 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
         try (PreparedStatement p = c.prepareStatement("SELECT set_config('app.user_id', ?, true), set_config('app.source_system', 'GBC_APP', true), set_config('app.correlation_id', ?, true)")) {
             p.setString(1, Long.toString(actorUserId)); p.setString(2, correlationId == null ? "" : correlationId); p.executeQuery().close();
         }
+    }
+
+    private void requireCaptureDateEligible(Connection c, LocalDate businessDate, String timezone) throws SQLException {
+        if (businessDate == null) throw new DomainValidationException("businessDate is required");
+        final ZoneId plantZone;
+        try {
+            plantZone = ZoneId.of(timezone);
+        } catch (DateTimeException e) {
+            throw new DomainValidationException("Plant timezone_name is invalid");
+        }
+        Instant databaseNow;
+        try (PreparedStatement p = c.prepareStatement("SELECT clock_timestamp()")) {
+            try (ResultSet r = p.executeQuery()) {
+                r.next();
+                databaseNow = r.getObject(1, OffsetDateTime.class).toInstant();
+            }
+        }
+        ManualKpiDateSelection selection = new ManualKpiDatePolicy().evaluate(businessDate, plantZone, databaseNow);
+        if (!selection.selectable()) throw new DomainValidationException(selection.message());
     }
 
     private void requireEditWindowOpen(Connection c, Instant createdAt) throws SQLException {

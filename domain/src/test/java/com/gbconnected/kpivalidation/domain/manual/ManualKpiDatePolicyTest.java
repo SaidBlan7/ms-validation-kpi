@@ -53,4 +53,26 @@ class ManualKpiDatePolicyTest {
         var result = policy.evaluate(LocalDate.of(2026, 3, 8), zone, now);
         assertEquals(Duration.ofHours(24), Duration.between(result.oeePeriodStart(), result.oeePeriodEnd()));
     }
+
+    @Test void holidayDateIsAllowedWithoutHolidayCalendarFiltering() {
+        ZoneId zone = ZoneId.of("America/Mexico_City");
+        Instant now = Instant.parse("2026-09-17T12:00:00Z");
+        var result = policy.evaluate(LocalDate.of(2026, 9, 16), zone, now);
+        assertTrue(result.selectable());
+        assertFalse(result.calendarDayFilteringApplied());
+    }
+
+    @Test void dstFallBackKeepsAbsoluteNinetySixHourBoundary() {
+        ZoneId zone = ZoneId.of("America/New_York");
+        // November 1, 2026 has a 25-hour civil day in New York.
+        Instant localStart = LocalDate.of(2026, 11, 1).atStartOfDay(zone).toInstant();
+        assertTrue(policy.evaluate(LocalDate.of(2026, 11, 1), zone, localStart.plus(Duration.ofHours(96))).selectable());
+        assertFalse(policy.evaluate(LocalDate.of(2026, 11, 1), zone, localStart.plus(Duration.ofHours(96)).plusSeconds(1)).selectable());
+    }
+
+    @Test void dateMustNotBeFutureEvenWhenUtcDateDiffers() {
+        ZoneId zone = ZoneId.of("America/Mexico_City");
+        Instant now = Instant.parse("2026-08-05T05:59:59Z");
+        assertEquals("FUTURE_DATE", policy.evaluate(LocalDate.of(2026, 8, 5), zone, now).rejectionCode());
+    }
 }
