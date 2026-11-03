@@ -498,7 +498,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 : stopTimeReference.programmingTypeState();
 
         issues.add(ValidationIssue.warning("STOP_TIME_REFERENCE_DERIVED_FROM_CANONICAL_STOPS",
-                "Times are reconstructed read-only from canonical v1.2 stops.stop_event/stop_fragment and the latest classification_history record for each stop event; the exact OEE calculation contract remains external"));
+                "Times are reconstructed read-only from canonical stops fragments. TOTAL gives the remaining classification after PARTIAL history allocations; the exact OEE calculation contract remains external"));
         if (hasUnmappedProgrammingType) {
             issues.add(ValidationIssue.warning("PROGRAMMING_TYPE_MAPPING_INCOMPLETE",
                     "At least one stop classification is outside the Spec 04 OEE scope because "
@@ -1080,7 +1080,7 @@ public final class OeeValidationService implements CheckEligibilityUseCase, Prev
                 new CapabilityView("operationalMonitoring", "IMPLEMENTED",
                         "HTTP runtimes log critical consultations/actions and rejected requests with correlation and actor/scope when available"),
                 new CapabilityView("stopTimeReferenceByClassification", "IMPLEMENTED_CANONICAL",
-                        "Read-only reference clips stops.stop_fragment to the D-1 window and groups by the latest stops.classification_history classification for each event"),
+                        "Read-only reference clips stops.stop_fragment to D-1, apportions PARTIAL allocations by event duration, and attributes remaining time to the latest TOTAL classification"),
                 new CapabilityView("stopTimeOriginalReconciliation", "IMPLEMENTED",
                         "Spec 04 prevalidation re-reads the canonical D-1 aggregate and blocks stale/manipulated originalSeconds"),
                 new CapabilityView("stopTimeSignAndFormatValidation", "IMPLEMENTED",

@@ -44,46 +44,99 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
                      WHERE c.organization_id IS NULL
                         OR c.organization_id = (SELECT organization_id FROM plant_org)
                 ),
-                classified_fragments AS (
-                    SELECT f.stop_fragment_id,
-                           e.stop_event_id,
-                           latest.stop_classification_id,
-                           GREATEST(
-                               0::bigint,
-                               LEAST(
-                                   COALESCE(f.line_downtime_seconds::bigint,
-                                       EXTRACT(EPOCH FROM (
-                                           LEAST(COALESCE(f.ended_at, b.day_to), b.day_to)
-                                           - GREATEST(f.started_at, b.day_from)
-                                       ))::bigint),
-                                   EXTRACT(EPOCH FROM (
-                                       LEAST(COALESCE(f.ended_at, b.day_to), b.day_to)
-                                       - GREATEST(f.started_at, b.day_from)
-                                   ))::bigint
-                               )
-                           ) AS line_downtime_seconds
-                    FROM bounds b
-                    JOIN stops.stop_fragment f
-                      ON f.started_at < b.day_to
-                     AND COALESCE(f.ended_at, b.day_to) > b.day_from
-                    JOIN stops.stop_event e
-                      ON e.stop_event_id = f.stop_event_id
-                     AND e.line_id = ?
-                    JOIN LATERAL (
-                        SELECT ch.stop_classification_id
-                          FROM stops.classification_history ch
-                         WHERE ch.stop_event_id = e.stop_event_id
-                         ORDER BY ch.changed_at DESC, ch.classification_history_id DESC
-                         LIMIT 1
-                    ) latest ON TRUE
+                -- A fragment's physical seconds are clipped to the plant-local day.
+                -- The full-event duration is used to apportion PARTIAL assignments
+                -- without multiplying them on multi-day stops.
+                fragment_seconds AS (
+                    SELECT f.stop_fragment_id, e.stop_event_id,
+                           GREATEST(0::bigint, LEAST(
+                               COALESCE(f.line_downtime_seconds::bigint,
+                                   EXTRACT(EPOCH FROM (LEAST(COALESCE(f.ended_at, b.day_to), b.day_to) - GREATEST(f.started_at, b.day_from)))::bigint),
+                               EXTRACT(EPOCH FROM (LEAST(COALESCE(f.ended_at, b.day_to), b.day_to) - GREATEST(f.started_at, b.day_from)))::bigint
+                           )) AS day_seconds
+                      FROM bounds b
+                      JOIN stops.stop_fragment f ON f.started_at < b.day_to
+                         AND COALESCE(f.ended_at, b.day_to) > b.day_from
+                      JOIN stops.stop_event e ON e.stop_event_id = f.stop_event_id AND e.line_id = ?
+                ),
+                -- Include fragments outside the target day in the denominator. A
+                -- PARTIAL duration belongs to the event, not to each day/fragment.
+                event_seconds AS (
+                    SELECT e.stop_event_id,
+                           COALESCE(SUM(GREATEST(0::bigint, COALESCE(f.line_downtime_seconds::bigint,
+                               EXTRACT(EPOCH FROM (COALESCE(f.ended_at, b.day_to) - f.started_at))::bigint))), 0) AS full_seconds
+                      FROM bounds b
+                      JOIN stops.stop_event e ON e.line_id = ?
+                      JOIN (SELECT DISTINCT stop_event_id FROM fragment_seconds) active
+                        ON active.stop_event_id = e.stop_event_id
+                      JOIN stops.stop_fragment f ON f.stop_event_id = e.stop_event_id
+                     GROUP BY e.stop_event_id
+                ),
+                day_events AS (
+                    SELECT fs.stop_event_id, SUM(fs.day_seconds) AS day_seconds,
+                           COUNT(*) AS fragment_count
+                      FROM fragment_seconds fs
+                     GROUP BY fs.stop_event_id
+                ),
+                latest_total AS (
+                    SELECT de.stop_event_id, ch.stop_classification_id,
+                           ch.changed_at, ch.classification_history_id
+                      FROM day_events de
+                      LEFT JOIN LATERAL (
+                          SELECT h.stop_classification_id, h.changed_at, h.classification_history_id
+                            FROM stops.classification_history h
+                           WHERE h.stop_event_id = de.stop_event_id
+                             AND h.classification_scope = 'TOTAL'
+                           ORDER BY h.changed_at DESC, h.classification_history_id DESC
+                           LIMIT 1
+                      ) ch ON TRUE
+                ),
+                partial_by_classification AS (
+                    SELECT h.stop_event_id, h.stop_classification_id,
+                           SUM(h.applied_duration_seconds::numeric) AS partial_seconds
+                      FROM stops.classification_history h
+                      JOIN day_events de ON de.stop_event_id = h.stop_event_id
+                      JOIN latest_total lt ON lt.stop_event_id = h.stop_event_id
+                     WHERE h.classification_scope = 'PARTIAL'
+                       AND (lt.classification_history_id IS NULL OR
+                           (h.changed_at, h.classification_history_id) >
+                           (lt.changed_at, lt.classification_history_id))
+                     GROUP BY h.stop_event_id, h.stop_classification_id
+                ),
+                partial_totals AS (
+                    SELECT stop_event_id, SUM(partial_seconds) AS partial_seconds
+                      FROM partial_by_classification GROUP BY stop_event_id
+                ),
+                allocated_partials AS (
+                    SELECT p.stop_event_id, p.stop_classification_id,
+                           FLOOR(de.day_seconds::numeric * p.partial_seconds /
+                               GREATEST(es.full_seconds::numeric, pt.partial_seconds, 1::numeric))::bigint AS seconds
+                      FROM partial_by_classification p
+                      JOIN partial_totals pt ON pt.stop_event_id = p.stop_event_id
+                      JOIN day_events de ON de.stop_event_id = p.stop_event_id
+                      JOIN event_seconds es ON es.stop_event_id = p.stop_event_id
+                ),
+                event_allocation AS (
+                    SELECT ap.stop_event_id, ap.stop_classification_id, ap.seconds AS recorded_seconds
+                      FROM allocated_partials ap WHERE ap.seconds > 0
+                    UNION ALL
+                    SELECT de.stop_event_id, lt.stop_classification_id,
+                           GREATEST(0::bigint, de.day_seconds - COALESCE((
+                               SELECT SUM(ap.seconds) FROM allocated_partials ap
+                                WHERE ap.stop_event_id = de.stop_event_id), 0)) AS recorded_seconds
+                      FROM day_events de
+                      JOIN latest_total lt ON lt.stop_event_id = de.stop_event_id
+                     WHERE lt.stop_classification_id IS NOT NULL
                 ),
                 observed AS (
-                    SELECT cf.stop_classification_id,
-                           COALESCE(SUM(cf.line_downtime_seconds), 0) AS recorded_seconds,
-                           COUNT(cf.stop_fragment_id) AS fragment_count,
-                           COUNT(DISTINCT cf.stop_event_id) AS stop_event_count
-                      FROM classified_fragments cf
-                     GROUP BY cf.stop_classification_id
+                    SELECT ea.stop_classification_id,
+                           SUM(ea.recorded_seconds) AS recorded_seconds,
+                           SUM(de.fragment_count) AS fragment_count,
+                           COUNT(DISTINCT ea.stop_event_id) AS stop_event_count
+                      FROM event_allocation ea
+                      JOIN day_events de ON de.stop_event_id = ea.stop_event_id
+                     WHERE ea.recorded_seconds > 0
+                     GROUP BY ea.stop_classification_id
                 ),
                 candidate AS (
                     SELECT stop_classification_id
@@ -114,6 +167,7 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
             p.setTimestamp(2, Timestamp.from(to));
             p.setLong(3, plantId);
             p.setLong(4, lineId);
+            p.setLong(5, lineId);
             try (ResultSet r = p.executeQuery()) {
                 List<StopTimeReferenceEntry> result = new ArrayList<>();
                 while (r.next()) {
@@ -133,7 +187,7 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
                 return List.copyOf(result);
             }
         } catch (SQLException ex) {
-            throw new IllegalStateException("Unable to read canonical v1.2 stop-time reference", ex);
+            throw new IllegalStateException("Unable to read canonical v2 stop-time reference", ex);
         }
     }
 
@@ -168,7 +222,7 @@ public final class JdbcStopTimeReferenceAdapter implements StopTimeReferencePort
         }
     }
 
-    @Override public String source() { return "CANONICAL_STOPS_V1_2"; }
+    @Override public String source() { return "CANONICAL_STOPS_V2_PARTIAL_AWARE"; }
 
     @Override
     public String programmingTypeState() {

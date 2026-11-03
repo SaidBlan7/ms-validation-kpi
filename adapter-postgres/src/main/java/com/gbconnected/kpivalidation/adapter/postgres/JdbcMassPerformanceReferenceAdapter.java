@@ -58,8 +58,8 @@ public final class JdbcMassPerformanceReferenceAdapter implements MassPerformanc
                  WHERE md.plant_id = ?
                    AND md.line_id = ?
                    AND md.dough_id IS NOT NULL
-                   AND COALESCE(be.captured_at, be.ended_at, be.started_at) >= ?
-                   AND COALESCE(be.captured_at, be.ended_at, be.started_at) < ?
+                   AND COALESCE(be.captured_at, be.ended_at, be.started_at, be.recorded_at) >= ?
+                   AND COALESCE(be.captured_at, be.ended_at, be.started_at, be.recorded_at) < ?
                    AND u.dimension_code = 'MASS'
                  GROUP BY be.uom_id, u.uom_code, u.uom_name, u.dimension_code
                 """;
