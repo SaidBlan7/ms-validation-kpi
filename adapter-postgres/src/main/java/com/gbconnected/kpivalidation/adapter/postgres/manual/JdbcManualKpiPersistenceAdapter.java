@@ -29,6 +29,8 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
     private static final String SNAPSHOT_SCHEMA_V2 = "MANUAL_KPI_V2";
     private static final String KG_UOM_CODE = "KG";
     private static final BigDecimal SECONDS_PER_HOUR = new BigDecimal("3600");
+    // DECIMAL128 cannot express 1/3600 exactly; allow only its tiny round-trip error.
+    private static final BigDecimal SECONDS_ROUNDTRIP_TOLERANCE = new BigDecimal("0.00000000000000000001");
     private static final BigDecimal CONTAINER_RESULT_VALUE = BigDecimal.ZERO;
 
     private final DataSource dataSource;
@@ -103,6 +105,9 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
                         || existing.version() != current.version()) {
                     throw new ManualKpiConflictException("Manual KPI record changed since it was read; reload it before saving");
                 }
+                // Check the actual database time after acquiring the business-key lock. A request
+                // started before expiry must not complete an update after the eight-hour boundary.
+                requireEditWindowOpen(c, current.createdAt());
                 long nextVersion = current.version() + 1L;
                 List<ManualKpiAuditEvent> events = new ArrayList<>(current.auditEvents());
                 events.add(new ManualKpiAuditEvent(nextVersion, "UPDATE", actorUserId, updatedAt, correlationId, "SUCCESS"));
@@ -168,7 +173,7 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
         String sql = """
                 SELECT stop_classification_id, duration_seconds
                   FROM stops.daily_classification_time
-                 WHERE line_id=? AND operational_date=?
+                 WHERE line_id=? AND operational_date=? AND source_system='GBC_APP'
                  ORDER BY stop_classification_id
                 """;
         List<ManualStopTimeInput> out = new ArrayList<>();
@@ -186,7 +191,7 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
                 SELECT ws.waste_classification_id, q.waste_subclassification_id, q.quantity
                   FROM waste.daily_manual_quantity q
                   JOIN waste.waste_subclassification ws ON ws.waste_subclassification_id=q.waste_subclassification_id
-                 WHERE q.plant_id=? AND q.line_id=? AND q.operational_date=?
+                 WHERE q.plant_id=? AND q.line_id=? AND q.operational_date=? AND q.source_system='GBC_APP'
                  ORDER BY q.waste_subclassification_id
                 """;
         List<ManualWasteInput> out = new ArrayList<>();
@@ -222,6 +227,7 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
                 ON CONFLICT (line_id, operational_date, stop_classification_id)
                 DO UPDATE SET duration_seconds=EXCLUDED.duration_seconds,
                               updated_by_user_id=?, updated_at=?
+                WHERE stops.daily_classification_time.source_system='GBC_APP'
                 RETURNING daily_classification_time_id
                 """;
         try (PreparedStatement p = c.prepareStatement(sql)) {
@@ -231,7 +237,7 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
                 p.setInt(4, hoursToSecondsExact(s.hours())); p.setLong(5, actorUserId);
                 p.setObject(6, OffsetDateTime.ofInstant(occurredAt, ZoneOffset.UTC)); p.setLong(7, actorUserId);
                 p.setObject(8, OffsetDateTime.ofInstant(occurredAt, ZoneOffset.UTC));
-                try (ResultSet r = p.executeQuery()) { if (!r.next()) throw new SQLException("Stop source-fact upsert returned no id"); ids.add(r.getLong(1)); }
+                try (ResultSet r = p.executeQuery()) { if (!r.next()) throw new SQLException("Stop source-fact conflicts with a non-manual source; automatic/manual precedence must be resolved"); ids.add(r.getLong(1)); }
             }
         }
         deleteMissingStopFacts(c, record.lineId(), record.businessDate(), keep);
@@ -240,8 +246,8 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
 
     private void deleteMissingStopFacts(Connection c, long lineId, LocalDate date, Set<Long> keep) throws SQLException {
         String sql = keep.isEmpty()
-                ? "DELETE FROM stops.daily_classification_time WHERE line_id=? AND operational_date=?"
-                : "DELETE FROM stops.daily_classification_time WHERE line_id=? AND operational_date=? AND NOT (stop_classification_id = ANY (?))";
+                ? "DELETE FROM stops.daily_classification_time WHERE source_system='GBC_APP' AND line_id=? AND operational_date=?"
+                : "DELETE FROM stops.daily_classification_time WHERE source_system='GBC_APP' AND line_id=? AND operational_date=? AND NOT (stop_classification_id = ANY (?))";
         try (PreparedStatement p = c.prepareStatement(sql)) {
             p.setLong(1, lineId); p.setObject(2, date);
             if (!keep.isEmpty()) p.setArray(3, c.createArrayOf("bigint", keep.toArray(Long[]::new)));
@@ -260,6 +266,7 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
                 ON CONFLICT (plant_id, line_id, operational_date, waste_subclassification_id)
                 DO UPDATE SET quantity=EXCLUDED.quantity, uom_id=EXCLUDED.uom_id,
                               updated_by_user_id=?, updated_at=?
+                WHERE waste.daily_manual_quantity.source_system='GBC_APP'
                 RETURNING daily_manual_quantity_id
                 """;
         try (PreparedStatement p = c.prepareStatement(sql)) {
@@ -269,7 +276,7 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
                 p.setLong(4, w.wasteSubclassificationId()); p.setBigDecimal(5, w.kilograms()); p.setLong(6, kgUomId);
                 p.setLong(7, actorUserId); p.setObject(8, OffsetDateTime.ofInstant(occurredAt, ZoneOffset.UTC)); p.setLong(9, actorUserId);
                 p.setObject(10, OffsetDateTime.ofInstant(occurredAt, ZoneOffset.UTC));
-                try (ResultSet r = p.executeQuery()) { if (!r.next()) throw new SQLException("Waste source-fact upsert returned no id"); ids.add(r.getLong(1)); }
+                try (ResultSet r = p.executeQuery()) { if (!r.next()) throw new SQLException("Waste source-fact conflicts with a non-manual source; automatic/manual precedence must be resolved"); ids.add(r.getLong(1)); }
             }
         }
         deleteMissingWasteFacts(c, record.plantId(), record.lineId(), record.businessDate(), keep);
@@ -278,8 +285,8 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
 
     private void deleteMissingWasteFacts(Connection c, long plantId, long lineId, LocalDate date, Set<Long> keep) throws SQLException {
         String sql = keep.isEmpty()
-                ? "DELETE FROM waste.daily_manual_quantity WHERE plant_id=? AND line_id=? AND operational_date=?"
-                : "DELETE FROM waste.daily_manual_quantity WHERE plant_id=? AND line_id=? AND operational_date=? AND NOT (waste_subclassification_id = ANY (?))";
+                ? "DELETE FROM waste.daily_manual_quantity WHERE source_system='GBC_APP' AND plant_id=? AND line_id=? AND operational_date=?"
+                : "DELETE FROM waste.daily_manual_quantity WHERE source_system='GBC_APP' AND plant_id=? AND line_id=? AND operational_date=? AND NOT (waste_subclassification_id = ANY (?))";
         try (PreparedStatement p = c.prepareStatement(sql)) {
             p.setLong(1, plantId); p.setLong(2, lineId); p.setObject(3, date);
             if (!keep.isEmpty()) p.setArray(4, c.createArrayOf("bigint", keep.toArray(Long[]::new)));
@@ -341,6 +348,18 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
     private void setAuditContext(Connection c, long actorUserId, String correlationId) throws SQLException {
         try (PreparedStatement p = c.prepareStatement("SELECT set_config('app.user_id', ?, true), set_config('app.source_system', 'GBC_APP', true), set_config('app.correlation_id', ?, true)")) {
             p.setString(1, Long.toString(actorUserId)); p.setString(2, correlationId == null ? "" : correlationId); p.executeQuery().close();
+        }
+    }
+
+    private void requireEditWindowOpen(Connection c, Instant createdAt) throws SQLException {
+        String sql = "SELECT clock_timestamp() < CAST(? AS timestamptz) + INTERVAL '8 hours'";
+        try (PreparedStatement p = c.prepareStatement(sql)) {
+            p.setObject(1, OffsetDateTime.ofInstant(createdAt, ZoneOffset.UTC));
+            try (ResultSet r = p.executeQuery()) {
+                if (!r.next() || !r.getBoolean(1)) {
+                    throw new DomainValidationException("Manual KPI record is locked because the 8-hour edit window expired");
+                }
+            }
         }
     }
 
@@ -432,9 +451,12 @@ public final class JdbcManualKpiPersistenceAdapter implements ManualKpiPersisten
 
     private static int hoursToSecondsExact(BigDecimal hours) {
         if (hours == null) throw new DomainValidationException("Stop time hours are required");
-        BigDecimal seconds = hours.multiply(SECONDS_PER_HOUR).stripTrailingZeros();
-        if (seconds.scale() > 0) throw new DomainValidationException("Stop time precision is finer than one second; canonical storage uses whole seconds");
-        try { return seconds.intValueExact(); }
+        BigDecimal seconds = hours.multiply(SECONDS_PER_HOUR);
+        BigDecimal nearestWholeSecond = seconds.setScale(0, RoundingMode.HALF_UP);
+        if (seconds.subtract(nearestWholeSecond).abs().compareTo(SECONDS_ROUNDTRIP_TOLERANCE) > 0) {
+            throw new DomainValidationException("Stop time precision is finer than one second; canonical storage uses whole seconds");
+        }
+        try { return nearestWholeSecond.intValueExact(); }
         catch (ArithmeticException e) { throw new DomainValidationException("Stop time cannot be represented as canonical duration_seconds"); }
     }
     private static BigDecimal secondsToHours(int seconds) { return BigDecimal.valueOf(seconds).divide(SECONDS_PER_HOUR, MathContext.DECIMAL128).stripTrailingZeros(); }
