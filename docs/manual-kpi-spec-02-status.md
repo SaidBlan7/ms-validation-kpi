@@ -4,7 +4,7 @@
 CERRADA sobre la base canónica vigente.
 
 ## Modelo canónico
-- Un usuario posee un solo `user_role_assignment` vigente. El rol default para esta spec es `SUPERUSUARIO` (`GBC_MANUAL_KPI_ROLE_CODE`).
+- Un usuario posee un solo `user_role_assignment` vigente. El rol default para esta spec es `plantSuperUser` (`GBC_MANUAL_KPI_ROLE_CODE`).
 - Ese rol debe tener la capability `KPI_MANUAL_ENTRY`.
 - Las plantas del superusuario se representan con `app_security.user_plant_access`.
 - Las líneas siguen siendo la intersección de `user_line_access`, línea→planta vigente, estado activo y feature `KPI_MANUAL_ENTRY_ENABLED`.

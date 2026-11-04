@@ -15,7 +15,7 @@ final class FunctionActorContextResolver {
 
     static ActorContext resolve(HttpRequestMessage<?> request) {
         if (localMode()) {
-            String role = System.getenv().getOrDefault("GBC_KPI_VALIDATOR_ROLE", "VALIDADOR");
+            String role = System.getenv().getOrDefault("GBC_KPI_VALIDATOR_ROLE", "validator");
             return new ActorContext(
                     UUID.fromString(System.getenv().getOrDefault("DEV_TENANT_ID", LT)),
                     UUID.fromString(System.getenv().getOrDefault("DEV_USER_OID", LU)),
